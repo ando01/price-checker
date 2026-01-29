@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name or product.url }} - Price Checker{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">{{ product.name or "Product" }}</h1>
+
+<div class="card">
+    <p><strong>URL:</strong> <a href="{{ product.url }}" target="_blank">{{ product.url }}</a></p>
+    <p style="margin-top: 0.5rem;"><strong>Status:</strong>
+        {% if product.last_status == "available" %}
+            <span class="status available">Available</span>
+        {% elif product.last_status == "unavailable" %}
+            <span class="status unavailable">Unavailable</span>
+        {% else %}
+            <span class="status unknown">Pending</span>
+        {% endif %}
+    </p>
+    <p style="margin-top: 0.5rem;"><strong>Price:</strong> {{ "$%.2f"|format(product.last_price) if product.last_price is not none else "—" }}</p>
+    <p style="margin-top: 0.5rem;"><strong>Last Checked:</strong> {{ product.last_checked.strftime("%Y-%m-%d %H:%M:%S") if product.last_checked else "—" }}</p>
+</div>
+
+<h2 style="margin-bottom: 1rem;">Check History</h2>
+
+{% if history %}
+<table>
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Price</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for h in history %}
+        <tr>
+            <td>{{ h.checked_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td>
+                {% if h.status == "available" %}
+                    <span class="status available">Available</span>
+                {% elif h.status == "unavailable" %}
+                    <span class="status unavailable">Unavailable</span>
+                {% else %}
+                    <span class="status unknown">{{ h.status }}</span>
+                {% endif %}
+            </td>
+            <td>{{ "$%.2f"|format(h.price) if h.price is not none else "—" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty">
+    <p>No check history yet. Waiting for next scheduled check.</p>
+</div>
+{% endif %}
+{% endblock %}

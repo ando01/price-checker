@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Price Checker{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">Monitored Products</h1>
+
+{% if products %}
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Price</th>
+            <th>Last Checked</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in products %}
+        <tr>
+            <td><a href="/product/{{ p.id }}">{{ p.name or p.url }}</a></td>
+            <td>
+                {% if p.last_status == "available" %}
+                    <span class="status available">Available</span>
+                {% elif p.last_status == "unavailable" %}
+                    <span class="status unavailable">Unavailable</span>
+                {% else %}
+                    <span class="status unknown">Pending</span>
+                {% endif %}
+            </td>
+            <td>{{ "$%.2f"|format(p.last_price) if p.last_price is not none else "—" }}</td>
+            <td>{{ p.last_checked.strftime("%Y-%m-%d %H:%M") if p.last_checked else "—" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty">
+    <p>No products being monitored yet.</p>
+    <p style="margin-top: 0.5rem;"><a href="/add" class="btn">Add Product</a></p>
+</div>
+{% endif %}
+{% endblock %}

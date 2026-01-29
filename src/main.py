@@ -4,13 +4,14 @@ import os
 import signal
 import sys
 
-from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from .checker import ProductChecker
 from .config import load_config
 from .database import Database
 from .notifier import PushoverNotifier
+from .web import create_app
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +49,7 @@ def main():
     checker.run_check()
 
     # Set up scheduler
-    scheduler = BlockingScheduler()
+    scheduler = BackgroundScheduler()
 
     scheduler.add_job(
         checker.run_check,
@@ -67,14 +68,15 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
+    scheduler.start()
     logger.info(
         f"Scheduler started. Checking every {config.check_interval_minutes} minutes."
     )
 
-    try:
-        scheduler.start()
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Scheduler stopped")
+    # Start Flask web UI
+    app = create_app(database)
+    logger.info("Starting web UI on port 5000")
+    app.run(host="0.0.0.0", port=5000)
 
 
 if __name__ == "__main__":

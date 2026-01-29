@@ -127,6 +127,15 @@ class Database:
             cursor = conn.execute("SELECT * FROM products")
             return [self._row_to_product(row) for row in cursor.fetchall()]
 
+    def get_product_by_id(self, product_id: int) -> Product | None:
+        """Get a product by its ID."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM products WHERE id = ?", (product_id,)
+            )
+            row = cursor.fetchone()
+            return self._row_to_product(row) if row else None
+
     def get_product_by_url(self, url: str) -> Product | None:
         """Get a product by its URL."""
         with self._get_connection() as conn:

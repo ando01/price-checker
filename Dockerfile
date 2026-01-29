@@ -12,6 +12,8 @@ COPY src/ ./src/
 # Create data directory
 RUN mkdir -p /app/data
 
+EXPOSE 5000
+
 # Run as non-root user
 RUN useradd -m -u 1000 checker && chown -R checker:checker /app
 USER checker
