@@ -165,6 +165,18 @@ class Database:
             )
             return [self._row_to_history(row) for row in cursor.fetchall()]
 
+    def delete_product(self, product_id: int) -> bool:
+        """Delete a product and its check history. Returns True if deleted."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "DELETE FROM check_history WHERE product_id = ?",
+                (product_id,),
+            )
+            cursor = conn.execute(
+                "DELETE FROM products WHERE id = ?", (product_id,)
+            )
+            return cursor.rowcount > 0
+
     def get_setting(self, key: str) -> str | None:
         """Get a setting value by key."""
         with self._get_connection() as conn:

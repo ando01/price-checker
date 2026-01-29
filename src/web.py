@@ -2,7 +2,7 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from .database import Database
 
@@ -47,6 +47,57 @@ def create_app(database: Database, scheduler: BackgroundScheduler) -> Flask:
 
         history = database.get_product_history(product_id)
         return render_template("product.html", product=product, history=history)
+
+    @app.route("/product/<int:product_id>/delete", methods=["POST"])
+    def delete_product(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            flash("Product not found.", "error")
+        elif database.delete_product(product_id):
+            flash(f"Product '{product.name or product.url}' removed.", "success")
+        else:
+            flash("Failed to remove product.", "error")
+        return redirect(url_for("index"))
+
+    @app.route("/api/products")
+    def api_products():
+        products = database.get_all_products()
+        return jsonify([
+            {
+                "id": p.id,
+                "name": p.name,
+                "url": p.url,
+                "last_status": p.last_status,
+                "last_price": p.last_price,
+                "last_checked": p.last_checked.strftime("%Y-%m-%d %H:%M")
+                if p.last_checked else None,
+            }
+            for p in products
+        ])
+
+    @app.route("/api/product/<int:product_id>")
+    def api_product(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        history = database.get_product_history(product_id, limit=100)
+        return jsonify({
+            "id": product.id,
+            "name": product.name,
+            "url": product.url,
+            "last_status": product.last_status,
+            "last_price": product.last_price,
+            "last_checked": product.last_checked.strftime("%Y-%m-%d %H:%M:%S")
+            if product.last_checked else None,
+            "history": [
+                {
+                    "status": h.status,
+                    "price": h.price,
+                    "checked_at": h.checked_at.strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                for h in history
+            ],
+        })
 
     @app.route("/settings", methods=["GET"])
     def settings():

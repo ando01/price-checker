@@ -6,6 +6,7 @@
 <div class="card">
     <p><strong>URL:</strong> <a href="{{ product.url }}" target="_blank">{{ product.url }}</a></p>
     <p style="margin-top: 0.5rem;"><strong>Status:</strong>
+        <span id="detail-status">
         {% if product.last_status == "available" %}
             <span class="status available">Available</span>
         {% elif product.last_status == "unavailable" %}
@@ -13,13 +14,18 @@
         {% else %}
             <span class="status unknown">Pending</span>
         {% endif %}
+        </span>
     </p>
-    <p style="margin-top: 0.5rem;"><strong>Price:</strong> {{ "$%.2f"|format(product.last_price) if product.last_price is not none else "—" }}</p>
-    <p style="margin-top: 0.5rem;"><strong>Last Checked:</strong> {{ product.last_checked.strftime("%Y-%m-%d %H:%M:%S") if product.last_checked else "—" }}</p>
+    <p style="margin-top: 0.5rem;"><strong>Price:</strong> <span id="detail-price">{{ "$%.2f"|format(product.last_price) if product.last_price is not none else "—" }}</span></p>
+    <p style="margin-top: 0.5rem;"><strong>Last Checked:</strong> <span id="detail-checked">{{ product.last_checked.strftime("%Y-%m-%d %H:%M:%S") if product.last_checked else "—" }}</span></p>
+    <form method="post" action="/product/{{ product.id }}/delete" style="margin-top: 1rem;" onsubmit="return confirm('Remove this product and all its history?');">
+        <button type="submit" class="btn btn-danger">Remove Product</button>
+    </form>
 </div>
 
 <h2 style="margin-bottom: 1rem;">Check History</h2>
 
+<div id="history-section">
 {% if history %}
 <table>
     <thead>
@@ -29,7 +35,7 @@
             <th>Price</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="history-body">
         {% for h in history %}
         <tr>
             <td>{{ h.checked_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
@@ -52,4 +58,38 @@
     <p>No check history yet. Waiting for next scheduled check.</p>
 </div>
 {% endif %}
+</div>
+
+<script>
+(function() {
+    var productId = {{ product.id }};
+    function statusBadge(s) {
+        if (s === "available") return '<span class="status available">Available</span>';
+        if (s === "unavailable") return '<span class="status unavailable">Unavailable</span>';
+        return '<span class="status unknown">' + (s || "Pending") + '</span>';
+    }
+    function fmtPrice(p) {
+        return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
+    }
+    function refresh() {
+        fetch("/api/product/" + productId)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(d) {
+                if (!d) return;
+                document.getElementById("detail-status").innerHTML = statusBadge(d.last_status);
+                document.getElementById("detail-price").textContent = fmtPrice(d.last_price);
+                document.getElementById("detail-checked").textContent = d.last_checked || "\u2014";
+                if (d.history && d.history.length) {
+                    var rows = d.history.map(function(h) {
+                        return "<tr><td>" + h.checked_at + "</td><td>" + statusBadge(h.status) + "</td><td>" + fmtPrice(h.price) + "</td></tr>";
+                    }).join("");
+                    var section = document.getElementById("history-section");
+                    section.innerHTML = '<table><thead><tr><th>Time</th><th>Status</th><th>Price</th></tr></thead><tbody id="history-body">' + rows + '</tbody></table>';
+                }
+            })
+            .catch(function() {});
+    }
+    setInterval(refresh, 30000);
+})();
+</script>
 {% endblock %}

@@ -13,9 +13,9 @@
             <th>Last Checked</th>
         </tr>
     </thead>
-    <tbody>
+    <tbody id="product-body">
         {% for p in products %}
-        <tr>
+        <tr data-id="{{ p.id }}">
             <td><a href="/product/{{ p.id }}">{{ p.name or p.url }}</a></td>
             <td>
                 {% if p.last_status == "available" %}
@@ -33,9 +33,43 @@
     </tbody>
 </table>
 {% else %}
-<div class="empty">
+<div class="empty" id="empty-state">
     <p>No products being monitored yet.</p>
     <p style="margin-top: 0.5rem;"><a href="/add" class="btn">Add Product</a></p>
 </div>
 {% endif %}
+
+<script>
+(function() {
+    function statusBadge(s) {
+        if (s === "available") return '<span class="status available">Available</span>';
+        if (s === "unavailable") return '<span class="status unavailable">Unavailable</span>';
+        return '<span class="status unknown">' + (s || "Pending") + '</span>';
+    }
+    function fmtPrice(p) {
+        return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
+    }
+    function refresh() {
+        fetch("/api/products")
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(products) {
+                if (!products) return;
+                var tbody = document.getElementById("product-body");
+                if (!tbody) return;
+                var rows = products.map(function(p) {
+                    var name = p.name || p.url;
+                    return '<tr data-id="' + p.id + '">'
+                        + '<td><a href="/product/' + p.id + '">' + name + '</a></td>'
+                        + '<td>' + statusBadge(p.last_status) + '</td>'
+                        + '<td>' + fmtPrice(p.last_price) + '</td>'
+                        + '<td>' + (p.last_checked || "\u2014") + '</td>'
+                        + '</tr>';
+                }).join("");
+                tbody.innerHTML = rows;
+            })
+            .catch(function() {});
+    }
+    setInterval(refresh, 30000);
+})();
+</script>
 {% endblock %}
