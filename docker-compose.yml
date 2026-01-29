@@ -1,0 +1,17 @@
+services:
+  price-checker:
+    build: .
+    container_name: price-checker
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+    environment:
+      - CONFIG_PATH=/app/config.yaml
+      - DB_PATH=/app/data/checker.db
+      # Optionally override config file values with env vars:
+      # - PUSHOVER_USER_KEY=your-user-key
+      # - PUSHOVER_API_TOKEN=your-api-token
+      # - CHECK_INTERVAL_MINUTES=5
+      # Set to "true" to send a test notification on startup:
+      # - SEND_TEST_NOTIFICATION=true

@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Config with secrets
+config.yaml
+
+# Database
+data/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
