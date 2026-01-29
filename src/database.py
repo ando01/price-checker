@@ -66,6 +66,12 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_history_product_id
                 ON check_history(product_id)
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
 
     def add_product(self, url: str, name: str | None = None) -> Product:
         """Add a product to track. Returns the product (existing or new)."""
@@ -158,6 +164,24 @@ class Database:
                 (product_id, limit)
             )
             return [self._row_to_history(row) for row in cursor.fetchall()]
+
+    def get_setting(self, key: str) -> str | None:
+        """Get a setting value by key."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT value FROM settings WHERE key = ?", (key,)
+            )
+            row = cursor.fetchone()
+            return row["value"] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Set a setting value (upsert)."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
 
     def _row_to_product(self, row: sqlite3.Row) -> Product:
         return Product(

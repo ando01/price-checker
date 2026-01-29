@@ -48,12 +48,20 @@ def main():
     logger.info("Running initial product check...")
     checker.run_check()
 
+    # Determine check interval: prefer saved DB value, fall back to config
+    saved_interval = database.get_setting("check_interval_minutes")
+    if saved_interval is not None:
+        interval_minutes = int(saved_interval)
+        logger.info(f"Using saved check interval: {interval_minutes} minutes")
+    else:
+        interval_minutes = config.check_interval_minutes
+
     # Set up scheduler
     scheduler = BackgroundScheduler()
 
     scheduler.add_job(
         checker.run_check,
-        trigger=IntervalTrigger(minutes=config.check_interval_minutes),
+        trigger=IntervalTrigger(minutes=max(interval_minutes, 1)),
         id="product_check",
         name="Check product availability",
         replace_existing=True,
@@ -69,12 +77,18 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
 
     scheduler.start()
-    logger.info(
-        f"Scheduler started. Checking every {config.check_interval_minutes} minutes."
-    )
+
+    # If saved interval is 0, pause the job immediately after starting
+    if interval_minutes == 0:
+        scheduler.pause_job("product_check")
+        logger.info("Scheduled checks are paused (interval set to 0).")
+    else:
+        logger.info(
+            f"Scheduler started. Checking every {interval_minutes} minutes."
+        )
 
     # Start Flask web UI
-    app = create_app(database)
+    app = create_app(database, scheduler)
     logger.info("Starting web UI on port 5000")
     app.run(host="0.0.0.0", port=5000)
 
