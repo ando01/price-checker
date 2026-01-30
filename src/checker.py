@@ -4,6 +4,7 @@ import logging
 from .config import Config
 from .database import Database
 from .notifier import PushoverNotifier
+from .scrapers.amazon import AmazonScraper
 from .scrapers.base import BaseScraper, ProductInfo
 from .scrapers.ui_store import UIStoreScraper
 
@@ -19,6 +20,7 @@ class ProductChecker:
         self.notifier = PushoverNotifier(config.pushover)
         self.scrapers: list[BaseScraper] = [
             UIStoreScraper(),
+            AmazonScraper(),
         ]
 
     def _get_scraper(self, url: str) -> BaseScraper | None:
@@ -89,6 +91,53 @@ class ProductChecker:
 
         logger.info("Product check complete")
 
+    async def check_all_prices(self) -> None:
+        """Check all products for price drops and send notifications."""
+        logger.info("Starting price check...")
+
+        products = self.database.get_all_products()
+
+        if not products:
+            logger.warning("No products configured to check")
+            return
+
+        for product in products:
+            if product.last_price is None:
+                continue
+
+            info = await self.check_product(product.url, product.name)
+
+            if info is None or info.price is None:
+                continue
+
+            old_price = product.last_price
+            new_price = info.price
+
+            # Update database with latest info
+            current_status = "available" if info.available else "unavailable"
+            self.database.update_product_status(
+                product_id=product.id,
+                status=current_status,
+                price=new_price,
+                name=info.name if not product.name else None,
+            )
+
+            # Notify on price drop only
+            if new_price < old_price:
+                logger.info(
+                    f"Price drop for {product.name or product.url}: "
+                    f"${old_price:.2f} → ${new_price:.2f}"
+                )
+                await self.notifier.notify_price_drop(product, old_price, new_price)
+
+            await asyncio.sleep(1)
+
+        logger.info("Price check complete")
+
     def run_check(self) -> None:
         """Synchronous wrapper for check_all_products (for APScheduler)."""
         asyncio.run(self.check_all_products())
+
+    def run_price_check(self) -> None:
+        """Synchronous wrapper for check_all_prices (for APScheduler)."""
+        asyncio.run(self.check_all_prices())

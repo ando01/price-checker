@@ -56,6 +56,14 @@ def main():
     else:
         interval_minutes = config.check_interval_minutes
 
+    # Determine price check interval: prefer saved DB value, fall back to config
+    saved_price_interval = database.get_setting("price_check_interval_minutes")
+    if saved_price_interval is not None:
+        price_interval_minutes = int(saved_price_interval)
+        logger.info(f"Using saved price check interval: {price_interval_minutes} minutes")
+    else:
+        price_interval_minutes = config.check_interval_minutes
+
     # Set up scheduler
     scheduler = BackgroundScheduler()
 
@@ -64,6 +72,14 @@ def main():
         trigger=IntervalTrigger(minutes=max(interval_minutes, 1)),
         id="product_check",
         name="Check product availability",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        checker.run_price_check,
+        trigger=IntervalTrigger(minutes=max(price_interval_minutes, 1)),
+        id="price_check",
+        name="Check product prices",
         replace_existing=True,
     )
 
@@ -81,10 +97,18 @@ def main():
     # If saved interval is 0, pause the job immediately after starting
     if interval_minutes == 0:
         scheduler.pause_job("product_check")
-        logger.info("Scheduled checks are paused (interval set to 0).")
+        logger.info("Scheduled availability checks are paused (interval set to 0).")
     else:
         logger.info(
-            f"Scheduler started. Checking every {interval_minutes} minutes."
+            f"Scheduler started. Checking availability every {interval_minutes} minutes."
+        )
+
+    if price_interval_minutes == 0:
+        scheduler.pause_job("price_check")
+        logger.info("Scheduled price checks are paused (interval set to 0).")
+    else:
+        logger.info(
+            f"Checking prices every {price_interval_minutes} minutes."
         )
 
     # Start Flask web UI

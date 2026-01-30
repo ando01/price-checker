@@ -3,6 +3,7 @@ import logging
 import httpx
 
 from .config import PushoverConfig
+from .database import Product
 from .scrapers.base import ProductInfo
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,55 @@ class PushoverNotifier:
                 response.raise_for_status()
 
             logger.info(f"Notification sent for: {product.name}")
+            return True
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Pushover API error: {e.response.status_code} - {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send notification: {e}")
+            return False
+
+    async def notify_price_drop(
+        self, product: Product, old_price: float, new_price: float
+    ) -> bool:
+        """Send notification that a product's price has dropped.
+
+        Returns True if notification was sent successfully.
+        """
+        if not self.config.user_key or not self.config.api_token:
+            logger.warning("Pushover credentials not configured, skipping notification")
+            return False
+
+        message = (
+            f"{product.name or product.url}\n\n"
+            f"${old_price:.2f} → ${new_price:.2f}"
+        )
+
+        payload = {
+            "token": self.config.api_token,
+            "user": self.config.user_key,
+            "title": "Price Drop!",
+            "message": message,
+            "url": product.url,
+            "url_title": "View Product",
+            "priority": 0,
+            "sound": "cashregister",
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    PUSHOVER_API_URL,
+                    data=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+            logger.info(
+                f"Price drop notification sent for: {product.name or product.url} "
+                f"(${old_price:.2f} → ${new_price:.2f})"
+            )
             return True
 
         except httpx.HTTPStatusError as e:

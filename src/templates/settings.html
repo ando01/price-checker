@@ -2,7 +2,7 @@
 {% block title %}Settings — Price Checker{% endblock %}
 {% block content %}
 <div class="card">
-    <h2>Check Interval</h2>
+    <h2>Availability Check Interval</h2>
     <p style="margin: 0.75rem 0;">
         Status:
         {% if paused %}
@@ -14,7 +14,21 @@
     <form method="post" action="/settings" style="margin-top: 1rem;">
         <label for="interval">Interval (minutes)</label>
         <input type="number" id="interval" name="interval" min="0" value="{{ interval }}" style="max-width: 200px;">
-        <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 1rem;">Set to 0 to disable scheduled checks.</p>
+        <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 1rem;">Set to 0 to disable scheduled availability checks.</p>
+
+        <h2 style="margin-top: 1.5rem;">Price Check Interval</h2>
+        <p style="margin: 0.75rem 0;">
+            Status:
+            {% if price_paused %}
+                <span class="status unavailable">Paused</span>
+            {% else %}
+                <span class="status available">Active</span>
+            {% endif %}
+        </p>
+        <label for="price_interval">Interval (minutes)</label>
+        <input type="number" id="price_interval" name="price_interval" min="0" value="{{ price_interval }}" style="max-width: 200px;">
+        <p style="color: #6c757d; font-size: 0.85rem; margin-bottom: 1rem;">Set to 0 to disable scheduled price checks.</p>
+
         <button type="submit" class="btn">Save</button>
     </form>
 </div>
