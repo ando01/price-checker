@@ -73,13 +73,24 @@ class AmazonScraper(BaseScraper):
 
         price = None
         price_val = offers.get("price")
-        if price_val:
+        if not price_val:
+            price_spec = offers.get("priceSpecification", {})
+            if isinstance(price_spec, list):
+                price_spec = price_spec[0] if price_spec else {}
+            price_val = price_spec.get("price")
+        if price_val is not None:
             try:
                 price = float(price_val)
             except (ValueError, TypeError):
                 pass
 
-        currency = offers.get("priceCurrency", "USD")
+        currency = offers.get("priceCurrency")
+        if not currency:
+            price_spec = offers.get("priceSpecification", {})
+            if isinstance(price_spec, list):
+                price_spec = price_spec[0] if price_spec else {}
+            currency = price_spec.get("priceCurrency", "USD")
+        currency = currency or "USD"
 
         availability = offers.get("availability", "")
         available = self._is_available(availability)
