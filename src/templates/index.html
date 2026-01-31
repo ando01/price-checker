@@ -3,6 +3,23 @@
 {% block content %}
 <h1 style="margin-bottom: 1rem;">Monitored Products</h1>
 
+<div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+    <div class="card" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <strong>Availability Checker</strong>
+            <span id="avail-badge" class="status unknown">Loading</span>
+        </div>
+        <div id="avail-countdown" style="font-size: 0.9rem; color: #6c757d;">—</div>
+    </div>
+    <div class="card" style="flex: 1; min-width: 200px; margin-bottom: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <strong>Price Checker</strong>
+            <span id="price-badge" class="status unknown">Loading</span>
+        </div>
+        <div id="price-countdown" style="font-size: 0.9rem; color: #6c757d;">—</div>
+    </div>
+</div>
+
 {% if products %}
 <table>
     <thead>
@@ -49,7 +66,7 @@
     function fmtPrice(p) {
         return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
     }
-    function refresh() {
+    function refreshProducts() {
         fetch("/api/products")
             .then(function(r) { return r.ok ? r.json() : null; })
             .then(function(products) {
@@ -69,7 +86,64 @@
             })
             .catch(function() {});
     }
-    setInterval(refresh, 30000);
+    setInterval(refreshProducts, 30000);
+
+    /* --- Checker status & countdowns --- */
+    var checkerState = { availability: null, price: null };
+
+    function fmtCountdown(secs) {
+        if (secs == null || secs < 0) return "\u2014";
+        var m = Math.floor(secs / 60);
+        var s = secs % 60;
+        return m + "m " + (s < 10 ? "0" : "") + s + "s";
+    }
+
+    function renderBadge(el, active) {
+        if (active) {
+            el.className = "status available";
+            el.textContent = "Active";
+        } else {
+            el.className = "status unavailable";
+            el.textContent = "Paused";
+        }
+    }
+
+    function renderCountdown(el, info) {
+        if (!info || !info.active) {
+            el.textContent = "Paused";
+            return;
+        }
+        el.textContent = "Next check in " + fmtCountdown(info.seconds_remaining)
+            + " (every " + info.interval_minutes + "m)";
+    }
+
+    function fetchStatus() {
+        fetch("/api/status")
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+                if (!data) return;
+                checkerState.availability = data.availability;
+                checkerState.price = data.price;
+                renderBadge(document.getElementById("avail-badge"), data.availability.active);
+                renderBadge(document.getElementById("price-badge"), data.price.active);
+            })
+            .catch(function() {});
+    }
+
+    function tick() {
+        ["availability", "price"].forEach(function(key) {
+            var info = checkerState[key];
+            var elId = key === "availability" ? "avail-countdown" : "price-countdown";
+            if (info && info.active && info.seconds_remaining != null) {
+                info.seconds_remaining = Math.max(0, info.seconds_remaining - 1);
+            }
+            renderCountdown(document.getElementById(elId), info);
+        });
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 15000);
+    setInterval(tick, 1000);
 })();
 </script>
 {% endblock %}

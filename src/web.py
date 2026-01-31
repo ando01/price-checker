@@ -3,6 +3,8 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from datetime import datetime, timezone
+
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from .checker import ProductChecker
@@ -109,6 +111,28 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 for h in history
             ],
         })
+
+    @app.route("/api/status")
+    def api_status():
+        now = datetime.now(timezone.utc)
+        jobs = {}
+        for job_id, label in [
+            (AVAILABILITY_JOB_ID, "availability"),
+            (PRICE_JOB_ID, "price"),
+        ]:
+            job = scheduler.get_job(job_id)
+            if job is None or job.next_run_time is None:
+                jobs[label] = {"active": False, "interval_minutes": 0, "next_run_utc": None, "seconds_remaining": None}
+            else:
+                interval_min = int(job.trigger.interval.total_seconds() // 60)
+                remaining = max(0, (job.next_run_time - now).total_seconds())
+                jobs[label] = {
+                    "active": True,
+                    "interval_minutes": interval_min,
+                    "next_run_utc": job.next_run_time.isoformat(),
+                    "seconds_remaining": int(remaining),
+                }
+        return jsonify(jobs)
 
     @app.route("/settings", methods=["GET"])
     def settings():
