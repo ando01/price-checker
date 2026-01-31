@@ -112,7 +112,7 @@ def main():
         )
 
     # Start Flask web UI
-    app = create_app(database, scheduler)
+    app = create_app(database, scheduler, checker)
     logger.info("Starting web UI on port 5000")
     app.run(host="0.0.0.0", port=5000)
 

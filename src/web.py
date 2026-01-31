@@ -1,9 +1,11 @@
+import asyncio
 import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
+from .checker import ProductChecker
 from .database import Database
 
 logger = logging.getLogger(__name__)
@@ -12,7 +14,7 @@ AVAILABILITY_JOB_ID = "product_check"
 PRICE_JOB_ID = "price_check"
 
 
-def create_app(database: Database, scheduler: BackgroundScheduler) -> Flask:
+def create_app(database: Database, scheduler: BackgroundScheduler, checker: ProductChecker) -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.secret_key = "price-checker-secret"
@@ -34,6 +36,14 @@ def create_app(database: Database, scheduler: BackgroundScheduler) -> Flask:
         if not url:
             flash("URL is required.", "error")
             return redirect(url_for("add_form"))
+
+        if not name:
+            try:
+                info = asyncio.run(checker.check_product(url))
+                if info:
+                    name = info.name
+            except Exception:
+                logger.exception("Failed to fetch product name for %s", url)
 
         product = database.add_product(url, name)
         flash(f"Product '{product.name or product.url}' added.", "success")
