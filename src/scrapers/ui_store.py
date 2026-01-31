@@ -54,9 +54,9 @@ class UIStoreScraper(BaseScraper):
                 # Handle array of schemas
                 if isinstance(data, list):
                     for item in data:
-                        if item.get("@type") == "Product":
+                        if item.get("@type") in ("Product", "ProductGroup"):
                             return item
-                elif data.get("@type") == "Product":
+                elif data.get("@type") in ("Product", "ProductGroup"):
                     return data
 
             except (json.JSONDecodeError, TypeError):
@@ -68,8 +68,26 @@ class UIStoreScraper(BaseScraper):
         """Parse product info from JSON-LD data."""
         name = data.get("name", "Unknown Product")
 
-        # Extract price from offers
+        # For ProductGroup, collect offers from variants
         offers = data.get("offers", {})
+        variants = data.get("hasVariant", [])
+
+        if not offers and variants:
+            # Use the first available variant, or fall back to the first variant
+            chosen = None
+            for variant in variants:
+                v_offers = variant.get("offers", {})
+                if isinstance(v_offers, list):
+                    v_offers = v_offers[0] if v_offers else {}
+                if self._is_available(v_offers.get("availability", "")):
+                    chosen = v_offers
+                    break
+            if chosen is None and variants:
+                chosen = variants[0].get("offers", {})
+                if isinstance(chosen, list):
+                    chosen = chosen[0] if chosen else {}
+            offers = chosen or {}
+
         if isinstance(offers, list):
             offers = offers[0] if offers else {}
 
@@ -94,9 +112,18 @@ class UIStoreScraper(BaseScraper):
             currency = price_spec.get("priceCurrency", "USD")
         currency = currency or "USD"
 
-        # Check availability
-        availability = offers.get("availability", "")
-        available = self._is_available(availability)
+        # Check availability — for ProductGroup, available if any variant is
+        if variants:
+            available = any(
+                self._is_available(
+                    (v.get("offers") if isinstance(v.get("offers"), dict) else
+                     (v["offers"][0] if v.get("offers") else {})).get("availability", "")
+                )
+                for v in variants
+            )
+        else:
+            availability = offers.get("availability", "")
+            available = self._is_available(availability)
 
         return ProductInfo(
             name=name,
