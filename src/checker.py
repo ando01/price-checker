@@ -73,11 +73,11 @@ class ProductChecker:
             previous_status = product.last_status
             current_status = "available" if info.available else "unavailable"
 
-            # Update database
+            # Update database (preserve existing price if scraper didn't find one)
             self.database.update_product_status(
                 product_id=product.id,
                 status=current_status,
-                price=info.price,
+                price=info.price if info.price is not None else product.last_price,
                 name=info.name if not product.name else None,
             )
 
