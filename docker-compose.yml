@@ -8,8 +8,8 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
-      - /etc/localtime:/etc/localtime:ro
     environment:
+      - TZ=America/New_York
       - CONFIG_PATH=/app/config.yaml
       - DB_PATH=/app/data/checker.db
       # Optionally override config file values with env vars:
