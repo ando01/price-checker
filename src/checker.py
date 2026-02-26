@@ -67,6 +67,9 @@ class ProductChecker:
             return
 
         for product in products:
+            if not product.check_availability:
+                continue
+
             info = await self.check_product(product.url, product.name)
 
             if info is None:
@@ -104,6 +107,9 @@ class ProductChecker:
             return
 
         for product in products:
+            if not product.check_price:
+                continue
+
             if product.last_price is None:
                 continue
 

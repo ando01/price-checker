@@ -24,7 +24,14 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     @app.route("/")
     def index():
         products = database.get_all_products()
-        return render_template("index.html", products=products)
+        avail_interval = int(database.get_setting("check_interval_minutes") or 5)
+        price_interval = int(database.get_setting("price_check_interval_minutes") or 0)
+        return render_template(
+            "index.html",
+            products=products,
+            avail_interval=avail_interval,
+            price_interval=price_interval,
+        )
 
     @app.route("/add", methods=["GET"])
     def add_form():
@@ -84,9 +91,21 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 "last_price": p.last_price,
                 "last_checked": p.last_checked.strftime("%Y-%m-%d %H:%M")
                 if p.last_checked else None,
+                "check_availability": p.check_availability,
+                "check_price": p.check_price,
             }
             for p in products
         ])
+
+    @app.route("/api/product/<int:product_id>/checks", methods=["POST"])
+    def api_update_product_checks(product_id: int):
+        data = request.get_json() or {}
+        ca = data.get("check_availability")
+        cp = data.get("check_price")
+        if ca is None and cp is None:
+            return jsonify({"error": "no fields provided"}), 400
+        database.update_product_checks(product_id, ca, cp)
+        return jsonify({"ok": True})
 
     @app.route("/api/product/<int:product_id>")
     def api_product(product_id: int):
@@ -134,41 +153,12 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 }
         return jsonify(jobs)
 
-    @app.route("/settings", methods=["GET"])
+    @app.route("/settings", methods=["GET", "POST"])
     def settings():
-        # Availability interval
-        saved = database.get_setting("check_interval_minutes")
-        avail_job = scheduler.get_job(AVAILABILITY_JOB_ID)
-        if saved is not None:
-            interval = int(saved)
-        elif avail_job and hasattr(avail_job.trigger, "interval"):
-            interval = int(avail_job.trigger.interval.total_seconds() // 60)
-        else:
-            interval = 0
-        paused = avail_job is None or avail_job.next_run_time is None
+        return redirect(url_for("index"))
 
-        # Price check interval
-        saved_price = database.get_setting("price_check_interval_minutes")
-        price_job = scheduler.get_job(PRICE_JOB_ID)
-        if saved_price is not None:
-            price_interval = int(saved_price)
-        elif price_job and hasattr(price_job.trigger, "interval"):
-            price_interval = int(price_job.trigger.interval.total_seconds() // 60)
-        else:
-            price_interval = 0
-        price_paused = price_job is None or price_job.next_run_time is None
-
-        return render_template(
-            "settings.html",
-            interval=interval,
-            paused=paused,
-            price_interval=price_interval,
-            price_paused=price_paused,
-        )
-
-    @app.route("/settings", methods=["POST"])
-    def update_settings():
-        # --- Availability interval ---
+    @app.route("/settings/availability", methods=["POST"])
+    def update_availability_settings():
         raw = request.form.get("interval", "").strip()
         try:
             interval = int(raw)
@@ -176,14 +166,13 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 raise ValueError
         except (ValueError, TypeError):
             flash("Availability interval must be a non-negative integer.", "error")
-            return redirect(url_for("settings"))
+            return redirect(url_for("index"))
 
         database.set_setting("check_interval_minutes", str(interval))
-
         avail_job = scheduler.get_job(AVAILABILITY_JOB_ID)
         if avail_job is None:
             flash("Availability scheduler job not found.", "error")
-            return redirect(url_for("settings"))
+            return redirect(url_for("index"))
 
         if interval > 0:
             scheduler.reschedule_job(
@@ -195,22 +184,24 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             scheduler.pause_job(AVAILABILITY_JOB_ID)
             flash("Scheduled availability checks disabled.", "success")
 
-        # --- Price check interval ---
-        raw_price = request.form.get("price_interval", "").strip()
+        return redirect(url_for("index"))
+
+    @app.route("/settings/price", methods=["POST"])
+    def update_price_settings():
+        raw = request.form.get("price_interval", "").strip()
         try:
-            price_interval = int(raw_price)
+            price_interval = int(raw)
             if price_interval < 0:
                 raise ValueError
         except (ValueError, TypeError):
             flash("Price check interval must be a non-negative integer.", "error")
-            return redirect(url_for("settings"))
+            return redirect(url_for("index"))
 
         database.set_setting("price_check_interval_minutes", str(price_interval))
-
         price_job = scheduler.get_job(PRICE_JOB_ID)
         if price_job is None:
             flash("Price check scheduler job not found.", "error")
-            return redirect(url_for("settings"))
+            return redirect(url_for("index"))
 
         if price_interval > 0:
             scheduler.reschedule_job(
@@ -222,6 +213,6 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             scheduler.pause_job(PRICE_JOB_ID)
             flash("Scheduled price checks disabled.", "success")
 
-        return redirect(url_for("settings"))
+        return redirect(url_for("index"))
 
     return app

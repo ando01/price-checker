@@ -13,6 +13,8 @@ class Product:
     last_status: str | None
     last_price: float | None
     last_checked: datetime | None
+    check_availability: bool = True
+    check_price: bool = True
 
 
 @dataclass
@@ -72,6 +74,14 @@ class Database:
                     value TEXT
                 )
             """)
+            # Migration: add per-product check flags if not present
+            for col, default in [("check_availability", 1), ("check_price", 1)]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE products ADD COLUMN {col} INTEGER DEFAULT {default}"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
 
     def add_product(self, url: str, name: str | None = None) -> Product:
         """Add a product to track. Returns the product (existing or new)."""
@@ -195,7 +205,35 @@ class Database:
                 (key, value),
             )
 
+    def update_product_checks(
+        self,
+        product_id: int,
+        check_availability: bool | None = None,
+        check_price: bool | None = None,
+    ) -> None:
+        """Update per-product checker enable/disable flags."""
+        if check_availability is None and check_price is None:
+            return
+        with self._get_connection() as conn:
+            if check_availability is not None and check_price is not None:
+                conn.execute(
+                    "UPDATE products SET check_availability = ?, check_price = ? WHERE id = ?",
+                    (1 if check_availability else 0, 1 if check_price else 0, product_id),
+                )
+            elif check_availability is not None:
+                conn.execute(
+                    "UPDATE products SET check_availability = ? WHERE id = ?",
+                    (1 if check_availability else 0, product_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE products SET check_price = ? WHERE id = ?",
+                    (1 if check_price else 0, product_id),
+                )
+
     def _row_to_product(self, row: sqlite3.Row) -> Product:
+        ca = row["check_availability"]
+        cp = row["check_price"]
         return Product(
             id=row["id"],
             url=row["url"],
@@ -204,6 +242,8 @@ class Database:
             last_price=row["last_price"],
             last_checked=datetime.fromisoformat(row["last_checked"])
             if row["last_checked"] else None,
+            check_availability=bool(ca if ca is not None else 1),
+            check_price=bool(cp if cp is not None else 1),
         )
 
     def _row_to_history(self, row: sqlite3.Row) -> CheckHistory:

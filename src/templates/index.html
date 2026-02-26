@@ -10,6 +10,12 @@
             <span id="avail-badge" class="status unknown">Loading</span>
         </div>
         <div id="avail-countdown" style="font-size: 0.9rem; color: #6c757d;">—</div>
+        <form method="post" action="/settings/availability" style="margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem;">
+            <label for="avail-interval" style="font-size: 0.85rem; white-space: nowrap;">Interval (min):</label>
+            <input type="number" id="avail-interval" name="interval" min="0" value="{{ avail_interval }}"
+                   style="width: 65px; padding: 0.2rem 0.4rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem;">
+            <button type="submit" class="btn" style="padding: 0.2rem 0.6rem; font-size: 0.85rem;">Save</button>
+        </form>
     </div>
     <div class="card" style="flex: 1; min-width: 200px; margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
@@ -17,6 +23,12 @@
             <span id="price-badge" class="status unknown">Loading</span>
         </div>
         <div id="price-countdown" style="font-size: 0.9rem; color: #6c757d;">—</div>
+        <form method="post" action="/settings/price" style="margin-top: 0.6rem; display: flex; align-items: center; gap: 0.5rem;">
+            <label for="price-interval" style="font-size: 0.85rem; white-space: nowrap;">Interval (min):</label>
+            <input type="number" id="price-interval" name="price_interval" min="0" value="{{ price_interval }}"
+                   style="width: 65px; padding: 0.2rem 0.4rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem;">
+            <button type="submit" class="btn" style="padding: 0.2rem 0.6rem; font-size: 0.85rem;">Save</button>
+        </form>
     </div>
 </div>
 
@@ -28,6 +40,7 @@
             <th>Status</th>
             <th>Price</th>
             <th>Last Checked</th>
+            <th>Checks</th>
         </tr>
     </thead>
     <tbody id="product-body">
@@ -45,6 +58,16 @@
             </td>
             <td>{{ "$%.2f"|format(p.last_price) if p.last_price is not none else "—" }}</td>
             <td>{{ p.last_checked.strftime("%Y-%m-%d %H:%M") if p.last_checked else "—" }}</td>
+            <td>
+                <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap;">
+                    <input type="checkbox" class="check-toggle" data-id="{{ p.id }}" data-field="check_availability" {{ "checked" if p.check_availability }}>
+                    Avail
+                </label>
+                <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap; margin-top: 0.2rem;">
+                    <input type="checkbox" class="check-toggle" data-id="{{ p.id }}" data-field="check_price" {{ "checked" if p.check_price }}>
+                    Price
+                </label>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
@@ -66,6 +89,17 @@
     function fmtPrice(p) {
         return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
     }
+    function checkboxCell(id, ca, cp) {
+        return '<td>'
+            + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;">'
+            + '<input type="checkbox" class="check-toggle" data-id="' + id + '" data-field="check_availability"' + (ca ? ' checked' : '') + '> Avail'
+            + '</label>'
+            + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;margin-top:0.2rem;">'
+            + '<input type="checkbox" class="check-toggle" data-id="' + id + '" data-field="check_price"' + (cp ? ' checked' : '') + '> Price'
+            + '</label>'
+            + '</td>';
+    }
+
     function refreshProducts() {
         fetch("/api/products")
             .then(function(r) { return r.ok ? r.json() : null; })
@@ -80,6 +114,7 @@
                         + '<td>' + statusBadge(p.last_status) + '</td>'
                         + '<td>' + fmtPrice(p.last_price) + '</td>'
                         + '<td>' + (p.last_checked || "\u2014") + '</td>'
+                        + checkboxCell(p.id, p.check_availability, p.check_price)
                         + '</tr>';
                 }).join("");
                 tbody.innerHTML = rows;
@@ -87,6 +122,23 @@
             .catch(function() {});
     }
     setInterval(refreshProducts, 30000);
+
+    /* --- Per-product check toggles (event delegation survives AJAX re-render) --- */
+    document.addEventListener('change', function(e) {
+        var cb = e.target;
+        if (!cb.classList.contains('check-toggle')) return;
+        var id = cb.dataset.id;
+        var field = cb.dataset.field;
+        var body = {};
+        body[field] = cb.checked;
+        fetch('/api/product/' + id + '/checks', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        }).catch(function() {
+            cb.checked = !cb.checked; // revert on error
+        });
+    });
 
     /* --- Checker status & countdowns --- */
     var checkerState = { availability: null, price: null };
