@@ -10,6 +10,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from .checker import ProductChecker
 from .config import load_config
 from .database import Database
+from .log_handler import MemoryLogHandler
 from .notifier import PushoverNotifier
 from .web import create_app
 
@@ -18,6 +19,12 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
+
+# In-memory log buffer — captures all records so the web UI can display them.
+_mem_handler = MemoryLogHandler(maxlen=1000)
+_mem_handler.setLevel(logging.DEBUG)
+logging.getLogger().addHandler(_mem_handler)
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,7 +119,7 @@ def main():
         )
 
     # Start Flask web UI
-    app = create_app(database, scheduler, checker)
+    app = create_app(database, scheduler, checker, _mem_handler)
     logger.info("Starting web UI on port 5000")
     app.run(host="0.0.0.0", port=5000)
 

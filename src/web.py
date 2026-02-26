@@ -9,6 +9,7 @@ from flask import Flask, flash, jsonify, redirect, render_template, request, url
 
 from .checker import ProductChecker
 from .database import Database
+from .log_handler import MemoryLogHandler
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ AVAILABILITY_JOB_ID = "product_check"
 PRICE_JOB_ID = "price_check"
 
 
-def create_app(database: Database, scheduler: BackgroundScheduler, checker: ProductChecker) -> Flask:
+def create_app(database: Database, scheduler: BackgroundScheduler, checker: ProductChecker, log_handler: MemoryLogHandler) -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.secret_key = "price-checker-secret"
@@ -163,6 +164,15 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                     "seconds_remaining": int(remaining),
                 }
         return jsonify(jobs)
+
+    @app.route("/logs")
+    def logs():
+        return render_template("log.html")
+
+    @app.route("/api/logs")
+    def api_logs():
+        since = request.args.get("since", 0, type=int)
+        return jsonify(log_handler.get_since(since))
 
     @app.route("/settings", methods=["GET", "POST"])
     def settings():

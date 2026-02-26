@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Logs - Price Checker{% endblock %}
+{% block content %}
+<h1 style="margin-bottom: 1rem;">Live Logs</h1>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+
+    <!-- Toolbar -->
+    <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.65rem 1rem; border-bottom: 1px solid #eee; flex-wrap: wrap; background: #fafafa;">
+        <select id="level-filter" style="padding: 0.3rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem;">
+            <option value="ALL">All levels</option>
+            <option value="INFO">INFO +</option>
+            <option value="WARNING">WARNING +</option>
+            <option value="ERROR">ERROR +</option>
+        </select>
+        <input type="text" id="text-filter" placeholder="Filter text…"
+               style="padding: 0.3rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; width: 200px;">
+        <label style="font-size: 0.85rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; margin: 0; white-space: nowrap;">
+            <input type="checkbox" id="auto-scroll" checked> Auto-scroll
+        </label>
+        <button id="clear-btn" class="btn"
+                style="padding: 0.25rem 0.75rem; font-size: 0.85rem; margin-left: auto;">
+            Clear display
+        </button>
+    </div>
+
+    <!-- Log output -->
+    <div id="log-container" style="
+        font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+        font-size: 0.8rem;
+        line-height: 1.65;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        height: 620px;
+        overflow-y: auto;
+        padding: 0.6rem 1rem;
+    ">
+        <div id="log-lines"></div>
+    </div>
+
+    <!-- Status bar -->
+    <div style="padding: 0.35rem 1rem; font-size: 0.78rem; color: #6c757d; border-top: 1px solid #eee; display: flex; gap: 1.5rem;">
+        <span><span id="log-count">0</span> lines displayed</span>
+        <span>Polling every 2 s</span>
+    </div>
+
+</div>
+
+<script>
+(function() {
+    var lastSeq = 0;
+    var displayCount = 0;
+
+    var container   = document.getElementById("log-container");
+    var linesDiv    = document.getElementById("log-lines");
+    var autoScrollCb = document.getElementById("auto-scroll");
+    var levelSel    = document.getElementById("level-filter");
+    var textInput   = document.getElementById("text-filter");
+    var countEl     = document.getElementById("log-count");
+
+    /* Level ordering for ≥ comparisons */
+    var LEVEL_ORDER = { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 };
+
+    /* Terminal colour palette */
+    var COLORS = {
+        DEBUG:    "#6c757d",
+        INFO:     "#d4d4d4",
+        WARNING:  "#ffc107",
+        ERROR:    "#f87171",
+        CRITICAL: "#ff5555",
+    };
+    var BG = {
+        ERROR:    "rgba(248,113,113,0.08)",
+        CRITICAL: "rgba(255,85,85,0.14)",
+    };
+
+    /* ---- Filter helpers ---- */
+    function levelOk(level) {
+        var sel = levelSel.value;
+        if (sel === "ALL") return true;
+        return (LEVEL_ORDER[level] || 0) >= (LEVEL_ORDER[sel] || 0);
+    }
+    function textOk(searchKey) {
+        var q = textInput.value.trim().toLowerCase();
+        return !q || searchKey.indexOf(q) !== -1;
+    }
+    function shouldShow(level, searchKey) {
+        return levelOk(level) && textOk(searchKey);
+    }
+
+    /* ---- Build a single log line element ---- */
+    function makeLine(r) {
+        var el = document.createElement("div");
+        el.dataset.level = r.level;
+        /* searchKey used for client-side filtering */
+        el.dataset.key = (r.logger + " " + r.message).toLowerCase();
+
+        var col = COLORS[r.level] || "#d4d4d4";
+        var bg  = BG[r.level]    || "transparent";
+
+        el.style.cssText = [
+            "color:" + col,
+            "background:" + bg,
+            "padding:1px 0",
+            "white-space:pre-wrap",
+            "word-break:break-all",
+        ].join(";");
+
+        /* Fixed-width level badge makes columns line up */
+        var badge = ("[" + r.level + "]       ").slice(0, 10);
+        el.textContent = r.time + "  " + badge + "  " + r.logger + "  " + r.message;
+
+        el.style.display = shouldShow(r.level, el.dataset.key) ? "" : "none";
+        return el;
+    }
+
+    /* ---- Append new records ---- */
+    function appendRecords(records) {
+        if (!records.length) return;
+        var frag = document.createDocumentFragment();
+        records.forEach(function(r) {
+            frag.appendChild(makeLine(r));
+            displayCount++;
+        });
+        linesDiv.appendChild(frag);
+        countEl.textContent = displayCount;
+        if (autoScrollCb.checked) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    /* ---- Re-apply filters to all existing lines ---- */
+    function refilter() {
+        var nodes = linesDiv.children;
+        for (var i = 0; i < nodes.length; i++) {
+            var el = nodes[i];
+            el.style.display = shouldShow(el.dataset.level, el.dataset.key) ? "" : "none";
+        }
+    }
+
+    /* ---- Poll for new log entries ---- */
+    function poll() {
+        fetch("/api/logs?since=" + lastSeq)
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(records) {
+                if (!records || !records.length) return;
+                lastSeq = records[records.length - 1].seq;
+                appendRecords(records);
+            })
+            .catch(function() {});
+    }
+
+    /* ---- Controls ---- */
+    document.getElementById("clear-btn").addEventListener("click", function() {
+        linesDiv.innerHTML = "";
+        displayCount = 0;
+        countEl.textContent = "0";
+    });
+
+    levelSel.addEventListener("change", refilter);
+    textInput.addEventListener("input", refilter);
+
+    /* Auto-scroll checkbox follows scroll position */
+    container.addEventListener("scroll", function() {
+        var atBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 20;
+        autoScrollCb.checked = atBottom;
+    });
+
+    /* Kick off */
+    poll();
+    setInterval(poll, 2000);
+})();
+</script>
+{% endblock %}
