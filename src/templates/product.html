@@ -5,7 +5,10 @@
 
 <div class="card">
     <p><strong>URL:</strong> <a href="{{ product.url }}" target="_blank">{{ product.url }}</a></p>
-    <p style="margin-top: 0.5rem;"><strong>Status:</strong>
+    <p style="margin-top: 0.75rem;">
+        <a href="{{ product.url }}" target="_blank" class="btn">Configure / View Product</a>
+    </p>
+    <p style="margin-top: 0.75rem;"><strong>Status:</strong>
         <span id="detail-status">
         {% if product.last_status == "available" %}
             <span class="status available">Available</span>

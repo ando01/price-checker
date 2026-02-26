@@ -6,6 +6,7 @@ from .database import Database
 from .notifier import PushoverNotifier
 from .scrapers.amazon import AmazonScraper
 from .scrapers.base import BaseScraper, ProductInfo
+from .scrapers.dell import DellScraper
 from .scrapers.ui_store import UIStoreScraper
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ class ProductChecker:
         self.scrapers: list[BaseScraper] = [
             UIStoreScraper(),
             AmazonScraper(),
+            DellScraper(),
         ]
 
     def _get_scraper(self, url: str) -> BaseScraper | None:
