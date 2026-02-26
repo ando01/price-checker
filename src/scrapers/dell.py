@@ -26,7 +26,11 @@ class DellScraper(BaseScraper):
             "q=0.9,image/avif,image/webp,*/*;q=0.8"
         ),
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        # Omit 'br' (Brotli) — brotlicffi is not installed, so httpx cannot
+        # decode it. Manually advertising br causes the server to send Brotli-
+        # compressed bytes that httpx silently passes through undecoded,
+        # resulting in BeautifulSoup receiving binary garbage.
+        "Accept-Encoding": "gzip, deflate",
         "Cache-Control": "no-cache",
         "Pragma": "no-cache",
     }

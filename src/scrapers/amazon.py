@@ -23,7 +23,7 @@ class AmazonScraper(BaseScraper):
             "q=0.9,image/avif,image/webp,*/*;q=0.8"
         ),
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
     }
 
     def can_handle(self, url: str) -> bool:
