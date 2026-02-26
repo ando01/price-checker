@@ -46,15 +46,26 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             flash("URL is required.", "error")
             return redirect(url_for("add_form"))
 
-        if not name:
-            try:
-                info = asyncio.run(checker.check_product(url))
-                if info:
-                    name = info.name
-            except Exception:
-                logger.exception("Failed to fetch product name for %s", url)
+        info = None
+        try:
+            info = asyncio.run(checker.check_product(url))
+            if info and not name:
+                name = info.name
+        except Exception:
+            logger.exception("Failed to fetch product info for %s", url)
 
         product = database.add_product(url, name)
+
+        # Save the initial status and price so the product is immediately
+        # tracked by both checkers, even when scheduled checks are paused.
+        if info is not None and product.id is not None:
+            database.update_product_status(
+                product_id=product.id,
+                status="available" if info.available else "unavailable",
+                price=info.price,
+                name=info.name if not name else None,
+            )
+
         flash(f"Product '{product.name or product.url}' added.", "success")
         return redirect(url_for("index"))
 
