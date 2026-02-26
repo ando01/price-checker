@@ -26,46 +26,29 @@
     </form>
 </div>
 
-<h2 style="margin-bottom: 1rem;">Check History</h2>
+<h2 style="margin-bottom: 1rem;">Price History</h2>
 
-<div id="history-section">
-{% if history %}
-<table>
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Status</th>
-            <th>Price</th>
-        </tr>
-    </thead>
-    <tbody id="history-body">
-        {% for h in history %}
-        <tr>
-            <td>{{ h.checked_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-            <td>
-                {% if h.status == "available" %}
-                    <span class="status available">Available</span>
-                {% elif h.status == "unavailable" %}
-                    <span class="status unavailable">Unavailable</span>
-                {% else %}
-                    <span class="status unknown">{{ h.status }}</span>
-                {% endif %}
-            </td>
-            <td>{{ "$%.2f"|format(h.price) if h.price is not none else "—" }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% else %}
-<div class="empty">
-    <p>No check history yet. Waiting for next scheduled check.</p>
-</div>
-{% endif %}
+<div class="card" id="chart-card">
+    {% if history %}
+    <canvas id="price-chart"></canvas>
+    <div style="margin-top: 0.75rem; font-size: 0.8rem; color: #6c757d; display: flex; gap: 1.5rem;">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#198754;margin-right:5px;vertical-align:middle;"></span>Available</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:5px;vertical-align:middle;"></span>Unavailable</span>
+    </div>
+    {% else %}
+    <div class="empty" id="no-history">
+        <p>No check history yet. Waiting for next scheduled check.</p>
+    </div>
+    {% endif %}
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script>
 (function() {
     var productId = {{ product.id }};
+    var chart = null;
+
     function statusBadge(s) {
         if (s === "available") return '<span class="status available">Available</span>';
         if (s === "unavailable") return '<span class="status unavailable">Unavailable</span>';
@@ -74,6 +57,150 @@
     function fmtPrice(p) {
         return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
     }
+
+    /* Parse "YYYY-MM-DD HH:MM:SS" → Date */
+    function parseDate(s) {
+        return new Date(s.replace(" ", "T"));
+    }
+
+    function buildChartData(history) {
+        /* history arrives newest-first; reverse for chronological order */
+        var items = history.slice().reverse();
+        var allNullPrice = items.every(function(h) { return h.price == null; });
+
+        var points = [];
+        var colors = [];
+
+        items.forEach(function(h) {
+            var y = allNullPrice
+                ? (h.status === "available" ? 1 : 0)
+                : h.price;          /* null stays null → gap in line */
+            points.push({ x: parseDate(h.checked_at), y: y, status: h.status, checked_at: h.checked_at });
+            var c = h.status === "available" ? "#198754"
+                  : h.status === "unavailable" ? "#dc3545"
+                  : "#6c757d";
+            colors.push(c);
+        });
+
+        return { points: points, colors: colors, availOnly: allNullPrice };
+    }
+
+    function makeChartConfig(cd) {
+        return {
+            type: "line",
+            data: {
+                datasets: [{
+                    label: cd.availOnly ? "Availability" : "Price",
+                    data: cd.points,
+                    borderColor: "#0d6efd",
+                    backgroundColor: "rgba(13,110,253,0.07)",
+                    fill: true,
+                    pointBackgroundColor: cd.colors,
+                    pointBorderColor: cd.colors,
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.2,
+                    spanGaps: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: { mode: "index", intersect: false },
+                scales: {
+                    x: {
+                        type: "time",
+                        time: {
+                            displayFormats: {
+                                minute: "MMM d, HH:mm",
+                                hour:   "MMM d, HH:mm",
+                                day:    "MMM d",
+                                week:   "MMM d",
+                            },
+                            tooltipFormat: "MMM d yyyy, HH:mm:ss",
+                        },
+                        ticks: { maxTicksLimit: 8, maxRotation: 30 },
+                        grid: { color: "rgba(0,0,0,0.06)" },
+                    },
+                    y: {
+                        beginAtZero: cd.availOnly,
+                        title: {
+                            display: true,
+                            text: cd.availOnly ? "Availability" : "Price (USD)",
+                        },
+                        ticks: {
+                            callback: function(val) {
+                                if (cd.availOnly) {
+                                    return val === 1 ? "Available" : val === 0 ? "Unavailable" : "";
+                                }
+                                return "$" + Number(val).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+                        },
+                        grid: { color: "rgba(0,0,0,0.06)" },
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: function(items) {
+                                return items[0].raw.checked_at || "";
+                            },
+                            label: function(item) {
+                                var raw = item.raw;
+                                var lines = [];
+                                if (!cd.availOnly && raw.y != null) {
+                                    lines.push("Price: $" + Number(raw.y).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+                                }
+                                if (raw.status) {
+                                    lines.push("Status: " + raw.status.charAt(0).toUpperCase() + raw.status.slice(1));
+                                }
+                                return lines;
+                            },
+                            labelColor: function(item) {
+                                var c = item.dataset.pointBackgroundColor[item.dataIndex];
+                                return { borderColor: c, backgroundColor: c };
+                            }
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    function initChart(history) {
+        var canvas = document.getElementById("price-chart");
+        if (!canvas) return;
+        var cd = buildChartData(history);
+        if (chart) { chart.destroy(); chart = null; }
+        chart = new Chart(canvas.getContext("2d"), makeChartConfig(cd));
+    }
+
+    function updateChart(history) {
+        if (!history || !history.length) return;
+        var canvas = document.getElementById("price-chart");
+        if (!canvas) {
+            /* Chart area wasn't rendered server-side (was empty on load); inject it */
+            var card = document.getElementById("chart-card");
+            if (!card) return;
+            card.innerHTML = '<canvas id="price-chart"></canvas>'
+                + '<div style="margin-top:0.75rem;font-size:0.8rem;color:#6c757d;display:flex;gap:1.5rem;">'
+                + '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#198754;margin-right:5px;vertical-align:middle;"></span>Available</span>'
+                + '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc3545;margin-right:5px;vertical-align:middle;"></span>Unavailable</span>'
+                + '</div>';
+            canvas = document.getElementById("price-chart");
+        }
+        if (!chart) {
+            initChart(history);
+            return;
+        }
+        var cd = buildChartData(history);
+        chart.data.datasets[0].data = cd.points;
+        chart.data.datasets[0].pointBackgroundColor = cd.colors;
+        chart.data.datasets[0].pointBorderColor = cd.colors;
+        chart.update();
+    }
+
     function refresh() {
         fetch("/api/product/" + productId)
             .then(function(r) { return r.ok ? r.json() : null; })
@@ -82,16 +209,13 @@
                 document.getElementById("detail-status").innerHTML = statusBadge(d.last_status);
                 document.getElementById("detail-price").textContent = fmtPrice(d.last_price);
                 document.getElementById("detail-checked").textContent = d.last_checked || "\u2014";
-                if (d.history && d.history.length) {
-                    var rows = d.history.map(function(h) {
-                        return "<tr><td>" + h.checked_at + "</td><td>" + statusBadge(h.status) + "</td><td>" + fmtPrice(h.price) + "</td></tr>";
-                    }).join("");
-                    var section = document.getElementById("history-section");
-                    section.innerHTML = '<table><thead><tr><th>Time</th><th>Status</th><th>Price</th></tr></thead><tbody id="history-body">' + rows + '</tbody></table>';
-                }
+                if (d.history) updateChart(d.history);
             })
             .catch(function() {});
     }
+
+    /* Load chart on page open, then refresh every 30 s */
+    refresh();
     setInterval(refresh, 30000);
 })();
 </script>
