@@ -83,6 +83,11 @@
                     <input type="checkbox" class="check-toggle" data-id="{{ p.id }}" data-field="check_price" {{ "checked" if p.check_price }}>
                     Price
                 </label>
+                <button class="btn check-now-btn" data-id="{{ p.id }}"
+                        style="font-size: 0.75rem; padding: 0.15rem 0.5rem; margin-top: 0.4rem; width: 100%;"
+                        {{ "disabled" if not p.check_availability and not p.check_price }}>
+                    Check Now
+                </button>
             </td>
         </tr>
         {% endfor %}
@@ -120,6 +125,7 @@
         }
     }
     function checkboxCell(id, ca, cp) {
+        var disabled = (!ca && !cp) ? ' disabled' : '';
         return '<td>'
             + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;">'
             + '<input type="checkbox" class="check-toggle" data-id="' + id + '" data-field="check_availability"' + (ca ? ' checked' : '') + '> Avail'
@@ -127,6 +133,7 @@
             + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;margin-top:0.2rem;">'
             + '<input type="checkbox" class="check-toggle" data-id="' + id + '" data-field="check_price"' + (cp ? ' checked' : '') + '> Price'
             + '</label>'
+            + '<button class="btn check-now-btn" data-id="' + id + '" style="font-size:0.75rem;padding:0.15rem 0.5rem;margin-top:0.4rem;width:100%;"' + disabled + '>Check Now</button>'
             + '</td>';
     }
 
@@ -168,6 +175,32 @@
         }).catch(function() {
             cb.checked = !cb.checked; // revert on error
         });
+    });
+
+    /* --- Check Now buttons --- */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.check-now-btn');
+        if (!btn || btn.disabled) return;
+        var id = btn.dataset.id;
+        btn.disabled = true;
+        btn.textContent = 'Checking\u2026';
+        fetch('/api/product/' + id + '/check-now', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.ok) {
+                    refreshProducts();
+                } else {
+                    btn.textContent = 'Error';
+                    setTimeout(function() { btn.textContent = 'Check Now'; btn.disabled = false; }, 2000);
+                    return;
+                }
+                btn.textContent = 'Check Now';
+                btn.disabled = false;
+            })
+            .catch(function() {
+                btn.textContent = 'Error';
+                setTimeout(function() { btn.textContent = 'Check Now'; btn.disabled = false; }, 2000);
+            });
     });
 
     /* --- Checker status & countdowns --- */

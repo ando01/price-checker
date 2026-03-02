@@ -115,6 +115,26 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             for p in products
         ])
 
+    @app.route("/api/product/<int:product_id>/check-now", methods=["POST"])
+    def api_check_now(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        if not product.check_availability and not product.check_price:
+            return jsonify({"error": "no checks enabled"}), 400
+        try:
+            info = asyncio.run(checker.check_one(product_id))
+        except Exception:
+            logger.exception("check-now failed for product %s", product_id)
+            return jsonify({"error": "check failed"}), 500
+        if info is None:
+            return jsonify({"error": "check failed"}), 500
+        return jsonify({
+            "ok": True,
+            "status": "available" if info.available else "unavailable",
+            "price": info.price,
+        })
+
     @app.route("/api/product/<int:product_id>/checks", methods=["POST"])
     def api_update_product_checks(product_id: int):
         data = request.get_json() or {}
