@@ -56,7 +56,23 @@
                     <span class="status unknown">Pending</span>
                 {% endif %}
             </td>
-            <td>{{ "$%.2f"|format(p.last_price) if p.last_price is not none else "—" }}</td>
+            <td>
+                {{ "$%.2f"|format(p.last_price) if p.last_price is not none else "—" }}
+                {% if p.last_price is not none %}
+                    {% set prev = prev_prices.get(p.id) %}
+                    {% if prev is not none %}
+                        {% set diff = p.last_price - prev %}
+                        {% set pct = diff / prev * 100 %}
+                        {% if diff < -0.001 %}
+                            <span class="price-trend down" title="Down from ${{ '%.2f'|format(prev) }}">↓ -${{ '%.2f'|format(diff|abs) }} ({{ '%.1f'|format(pct|abs) }}%)</span>
+                        {% elif diff > 0.001 %}
+                            <span class="price-trend up" title="Up from ${{ '%.2f'|format(prev) }}">↑ +${{ '%.2f'|format(diff) }} (+{{ '%.1f'|format(pct) }}%)</span>
+                        {% else %}
+                            <span class="price-trend flat" title="No change since last check">→ No change</span>
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            </td>
             <td>{{ p.last_checked.strftime("%Y-%m-%d %H:%M") if p.last_checked else "—" }}</td>
             <td>
                 <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap;">
@@ -89,6 +105,20 @@
     function fmtPrice(p) {
         return p != null ? "$" + Number(p).toFixed(2) : "\u2014";
     }
+    function fmtTrend(last, prev) {
+        if (last == null || prev == null || prev === 0) return "";
+        var diff = last - prev;
+        var pct = diff / prev * 100;
+        if (diff < -0.001) {
+            return '<span class="price-trend down" title="Down from $' + prev.toFixed(2) + '">'
+                + '\u2193 -$' + Math.abs(diff).toFixed(2) + ' (' + Math.abs(pct).toFixed(1) + '%)</span>';
+        } else if (diff > 0.001) {
+            return '<span class="price-trend up" title="Up from $' + prev.toFixed(2) + '">'
+                + '\u2191 +$' + diff.toFixed(2) + ' (+' + pct.toFixed(1) + '%)</span>';
+        } else {
+            return '<span class="price-trend flat" title="No change since last check">\u2192 No change</span>';
+        }
+    }
     function checkboxCell(id, ca, cp) {
         return '<td>'
             + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;">'
@@ -112,7 +142,7 @@
                     return '<tr data-id="' + p.id + '">'
                         + '<td><a href="/product/' + p.id + '">' + name + '</a></td>'
                         + '<td>' + statusBadge(p.last_status) + '</td>'
-                        + '<td>' + fmtPrice(p.last_price) + '</td>'
+                        + '<td>' + fmtPrice(p.last_price) + fmtTrend(p.last_price, p.prev_price) + '</td>'
                         + '<td>' + (p.last_checked || "\u2014") + '</td>'
                         + checkboxCell(p.id, p.check_availability, p.check_price)
                         + '</tr>';

@@ -175,6 +175,25 @@ class Database:
             )
             return [self._row_to_history(row) for row in cursor.fetchall()]
 
+    def get_previous_prices(self, product_ids: list[int]) -> dict[int, float | None]:
+        """Get the second most recent price for each product (price before the last check)."""
+        if not product_ids:
+            return {}
+        with self._get_connection() as conn:
+            placeholders = ",".join("?" * len(product_ids))
+            cursor = conn.execute(
+                f"""
+                SELECT product_id, price FROM (
+                    SELECT product_id, price,
+                           ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY checked_at DESC) AS rn
+                    FROM check_history
+                    WHERE product_id IN ({placeholders})
+                ) WHERE rn = 2
+                """,
+                product_ids,
+            )
+            return {row["product_id"]: row["price"] for row in cursor.fetchall()}
+
     def delete_product(self, product_id: int) -> bool:
         """Delete a product and its check history. Returns True if deleted."""
         with self._get_connection() as conn:

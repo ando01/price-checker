@@ -25,11 +25,14 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     @app.route("/")
     def index():
         products = database.get_all_products()
+        product_ids = [p.id for p in products if p.id is not None]
+        prev_prices = database.get_previous_prices(product_ids)
         avail_interval = int(database.get_setting("check_interval_minutes") or 5)
         price_interval = int(database.get_setting("price_check_interval_minutes") or 0)
         return render_template(
             "index.html",
             products=products,
+            prev_prices=prev_prices,
             avail_interval=avail_interval,
             price_interval=price_interval,
         )
@@ -94,6 +97,8 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     @app.route("/api/products")
     def api_products():
         products = database.get_all_products()
+        product_ids = [p.id for p in products if p.id is not None]
+        prev_prices = database.get_previous_prices(product_ids)
         return jsonify([
             {
                 "id": p.id,
@@ -101,6 +106,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 "url": p.url,
                 "last_status": p.last_status,
                 "last_price": p.last_price,
+                "prev_price": prev_prices.get(p.id),
                 "last_checked": p.last_checked.strftime("%Y-%m-%d %H:%M")
                 if p.last_checked else None,
                 "check_availability": p.check_availability,
