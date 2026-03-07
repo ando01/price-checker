@@ -4,21 +4,21 @@ A self-hosted Docker application that monitors product prices and availability a
 
 ## Features
 
-- **Multi-store support** — monitors products on [UI.com](https://store.ui.com) and [Amazon](https://www.amazon.com) (10+ regional domains)
-- **Web dashboard** — add, remove, and view products from your browser
-- **Price drop alerts** — notifies you when a tracked product's price decreases
-- **Availability alerts** — notifies you when an out-of-stock item comes back in stock
-- **Auto-detected product names** — just paste a URL; the name is fetched automatically
-- **Configurable intervals** — set separate schedules for availability and price checks (or pause either one)
-- **Check history** — per-product history of every price and status check, viewable in the UI
-- **SQLite storage** — lightweight, zero-config database
-- **Pushover notifications** — high-priority stock alerts and normal-priority price drop alerts
-- **Docker-ready** — single-container deployment with Docker Compose
+* **Multi-store support** — monitors products on [UI.com](https://store.ui.com) and [Amazon](https://www.amazon.com) (10+ regional domains)
+* **Web dashboard** — add, remove, and view products from your browser
+* **Price drop alerts** — notifies you when a tracked product's price decreases
+* **Availability alerts** — notifies you when an out-of-stock item comes back in stock
+* **Auto-detected product names** — just paste a URL; the name is fetched automatically
+* **Configurable intervals** — set separate schedules for availability and price checks (or pause either one)
+* **Check history** — per-product history of every price and status check, viewable in the UI
+* **SQLite storage** — lightweight, zero-config database
+* **Pushover notifications** — high-priority stock alerts and normal-priority price drop alerts
+* **Docker-ready** — single-container deployment with Docker Compose, pre-built image available on ghcr.io
 
 ## Supported Stores
 
 | Store | Domains |
-|-------|---------|
+| --- | --- |
 | UI.com | `store.ui.com` |
 | Amazon | `amazon.com`, `amazon.co.uk`, `amazon.ca`, `amazon.de`, `amazon.fr`, `amazon.it`, `amazon.es`, `amazon.co.jp`, `amazon.com.au` |
 
@@ -26,46 +26,70 @@ Adding support for a new store is straightforward — see [Extending](#extending
 
 ## Requirements
 
-- Docker and Docker Compose
-- A [Pushover](https://pushover.net/) account and app ($5 one-time purchase for the mobile app)
+* Docker and Docker Compose
+* A [Pushover](https://pushover.net/) account and app ($5 one-time purchase for the mobile app)
 
 ## Quick Start
 
 1. **Clone and configure:**
-   ```bash
-   git clone <repo-url> && cd price-checker
+```bash
+   git clone https://github.com/ando01/price-checker.git && cd price-checker
    cp config.yaml.example config.yaml
-   ```
+```
 
 2. **Edit `config.yaml`** with your Pushover credentials:
-   ```yaml
+```yaml
    pushover:
      user_key: "your-pushover-user-key"
      api_token: "your-pushover-app-token"
 
    check_interval_minutes: 5
-   ```
+```
 
    You can optionally seed products here, but it's easier to add them through the web UI:
-   ```yaml
+```yaml
    products:
      - url: "https://store.ui.com/us/en/category/wifi-special-devices/products/utr"
        name: "UniFi Travel Router"  # optional — auto-detected if omitted
-   ```
+```
 
-3. **Build and run:**
-   ```bash
+3. **Run it:**
+```bash
    docker compose up -d
-   ```
+```
 
-4. **Open the dashboard** at [http://localhost:8085](http://localhost:8085).
+   This pulls the pre-built image from `ghcr.io/ando01/price-checker:latest` and starts the container.
+
+4. **Open the dashboard** at <http://localhost:8085>.
 
 5. **Add products** — click "Add Product", paste a URL, and the app handles the rest.
+
+## Pre-built Image
+
+The latest image is automatically built and published to GitHub Container Registry on every push to `main`:
+```bash
+docker pull ghcr.io/ando01/price-checker:latest
+```
+
+## Building from Source
+
+If you want to modify the code and build your own image, swap the `image:` line in `docker-compose.yml` for `build: .`:
+```yaml
+services:
+  price-checker:
+    build: .
+    ...
+```
+
+Then run:
+```bash
+docker compose up -d --build
+```
 
 ## Web UI
 
 | Page | Description |
-|------|-------------|
+| --- | --- |
 | **Dashboard** (`/`) | Overview of all monitored products with current status, price, and last check time. Auto-refreshes every 30 seconds. |
 | **Add Product** (`/add`) | Paste a product URL to start monitoring. Name is auto-detected if left blank. |
 | **Product Detail** (`/product/<id>`) | Full check history for a single product with status and price over time. |
@@ -86,7 +110,7 @@ Adding support for a new store is straightforward — see [Extending](#extending
 Override config file values via environment variables in `docker-compose.yml`:
 
 | Variable | Description |
-|----------|-------------|
+| --- | --- |
 | `PUSHOVER_USER_KEY` | Pushover user key |
 | `PUSHOVER_API_TOKEN` | Pushover API token |
 | `CHECK_INTERVAL_MINUTES` | Check frequency in minutes |
@@ -96,7 +120,6 @@ Override config file values via environment variables in `docker-compose.yml`:
 ### Timezone
 
 The container timezone is set via the `TZ` environment variable in `docker-compose.yml`. Change it to your local timezone:
-
 ```yaml
 environment:
   - TZ=America/Chicago
@@ -109,14 +132,13 @@ See the [full list of timezone names](https://en.wikipedia.org/wiki/List_of_tz_d
 Two volumes are mounted by default:
 
 | Mount | Purpose |
-|-------|---------|
+| --- | --- |
 | `./config.yaml:/app/config.yaml:ro` | Configuration (read-only) |
 | `./data:/app/data` | SQLite database (`checker.db`) |
 
 Your check history and products persist across container restarts in the `data/` directory.
 
 ## Architecture
-
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                     Docker Container                         │
