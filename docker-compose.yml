@@ -1,6 +1,6 @@
 services:
   price-checker:
-    build: .
+    image: ghcr.io/ando01/price-checker:latest
     container_name: price-checker
     restart: unless-stopped
     ports:
