@@ -16,6 +16,9 @@
         <input type="text" id="text-filter" placeholder="Filter text…"
                style="padding: 0.3rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.85rem; width: 200px;">
         <label style="font-size: 0.85rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; margin: 0; white-space: nowrap;">
+            <input type="checkbox" id="hide-http" checked> Hide HTTP requests
+        </label>
+        <label style="font-size: 0.85rem; font-weight: normal; display: flex; align-items: center; gap: 0.3rem; cursor: pointer; margin: 0; white-space: nowrap;">
             <input type="checkbox" id="auto-scroll" checked> Auto-scroll
         </label>
         <button id="clear-btn" class="btn"
@@ -54,6 +57,7 @@
     var container   = document.getElementById("log-container");
     var linesDiv    = document.getElementById("log-lines");
     var autoScrollCb = document.getElementById("auto-scroll");
+    var hideHttpCb  = document.getElementById("hide-http");
     var levelSel    = document.getElementById("level-filter");
     var textInput   = document.getElementById("text-filter");
     var countEl     = document.getElementById("log-count");
@@ -84,14 +88,19 @@
         var q = textInput.value.trim().toLowerCase();
         return !q || searchKey.indexOf(q) !== -1;
     }
-    function shouldShow(level, searchKey) {
-        return levelOk(level) && textOk(searchKey);
+    function httpOk(logger) {
+        if (!hideHttpCb.checked) return true;
+        return logger !== "werkzeug";
+    }
+    function shouldShow(level, searchKey, logger) {
+        return levelOk(level) && textOk(searchKey) && httpOk(logger);
     }
 
     /* ---- Build a single log line element ---- */
     function makeLine(r) {
         var el = document.createElement("div");
         el.dataset.level = r.level;
+        el.dataset.logger = r.logger;
         /* searchKey used for client-side filtering */
         el.dataset.key = (r.logger + " " + r.message).toLowerCase();
 
@@ -110,7 +119,7 @@
         var badge = ("[" + r.level + "]       ").slice(0, 10);
         el.textContent = r.time + "  " + badge + "  " + r.logger + "  " + r.message;
 
-        el.style.display = shouldShow(r.level, el.dataset.key) ? "" : "none";
+        el.style.display = shouldShow(r.level, el.dataset.key, r.logger) ? "" : "none";
         return el;
     }
 
@@ -134,7 +143,7 @@
         var nodes = linesDiv.children;
         for (var i = 0; i < nodes.length; i++) {
             var el = nodes[i];
-            el.style.display = shouldShow(el.dataset.level, el.dataset.key) ? "" : "none";
+            el.style.display = shouldShow(el.dataset.level, el.dataset.key, el.dataset.logger) ? "" : "none";
         }
     }
 
@@ -159,6 +168,7 @@
 
     levelSel.addEventListener("change", refilter);
     textInput.addEventListener("input", refilter);
+    hideHttpCb.addEventListener("change", refilter);
 
     /* Auto-scroll checkbox follows scroll position */
     container.addEventListener("scroll", function() {
