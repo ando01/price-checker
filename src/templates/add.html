@@ -6,10 +6,29 @@
 <div class="card">
     <form method="POST" action="/add">
         <label for="url">Product URL</label>
-        <input type="url" id="url" name="url" placeholder="https://store.ui.com/us/en/..." required>
+        <input type="url" id="url" name="url" placeholder="https://example.com/product-page" required>
 
         <label for="name">Name (optional)</label>
         <input type="text" id="name" name="name" placeholder="e.g. UniFi Switch 24">
+
+        <details style="margin-bottom: 1rem;">
+            <summary style="cursor: pointer; font-weight: 500; color: #555; margin-bottom: 0.5rem;">
+                Advanced: Custom CSS Selectors
+            </summary>
+            <p style="font-size: 0.85rem; color: #6c757d; margin-bottom: 0.75rem;">
+                Most websites are detected automatically. Only fill these in if automatic detection
+                doesn't find the right price or name. Use your browser's "Inspect Element" to find
+                CSS selectors (e.g. <code>.product-title</code>, <code>#price</code>, <code>.price-value</code>).
+            </p>
+            <label for="css_name">Product Name Selector</label>
+            <input type="text" id="css_name" name="css_name" placeholder="e.g. h1.product-title">
+
+            <label for="css_price">Price Selector</label>
+            <input type="text" id="css_price" name="css_price" placeholder="e.g. .price-value, #product-price">
+
+            <label for="css_availability">Availability Selector</label>
+            <input type="text" id="css_availability" name="css_availability" placeholder="e.g. .stock-status, #availability">
+        </details>
 
         <button type="submit" class="btn">Add Product</button>
     </form>

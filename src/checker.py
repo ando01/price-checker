@@ -2,11 +2,12 @@ import asyncio
 import logging
 
 from .config import Config
-from .database import Database
+from .database import Database, Product
 from .notifier import PushoverNotifier
 from .scrapers.amazon import AmazonScraper
 from .scrapers.base import BaseScraper, ProductInfo
 from .scrapers.dell import DellScraper
+from .scrapers.generic import CSSSelectors, GenericScraper
 from .scrapers.ui_store import UIStoreScraper
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class ProductChecker:
             AmazonScraper(),
             DellScraper(),
         ]
+        self.generic_scraper = GenericScraper()
 
     def _get_scraper(self, url: str) -> BaseScraper | None:
         """Find a scraper that can handle the given URL."""
@@ -32,15 +34,26 @@ class ProductChecker:
                 return scraper
         return None
 
-    async def check_product(self, url: str, name: str | None = None) -> ProductInfo | None:
+    async def check_product(
+        self, url: str, name: str | None = None, product: Product | None = None,
+    ) -> ProductInfo | None:
         """Check a single product and update database."""
         scraper = self._get_scraper(url)
-        if not scraper:
-            logger.warning(f"No scraper found for URL: {url}")
-            return None
 
         try:
-            info = await scraper.scrape(url)
+            if scraper:
+                info = await scraper.scrape(url)
+            else:
+                # Use generic scraper with optional CSS selectors from DB
+                selectors = None
+                if product and (product.css_name or product.css_price or product.css_availability):
+                    selectors = CSSSelectors(
+                        name=product.css_name,
+                        price=product.css_price,
+                        availability=product.css_availability,
+                    )
+                info = await self.generic_scraper.scrape(url, selectors=selectors)
+
             logger.info(
                 f"Checked {info.name}: "
                 f"{'Available' if info.available else 'Unavailable'} "
@@ -70,7 +83,7 @@ class ProductChecker:
             if not product.check_availability:
                 continue
 
-            info = await self.check_product(product.url, product.name)
+            info = await self.check_product(product.url, product.name, product=product)
 
             if info is None:
                 continue
@@ -113,7 +126,7 @@ class ProductChecker:
             if product.last_price is None:
                 continue
 
-            info = await self.check_product(product.url, product.name)
+            info = await self.check_product(product.url, product.name, product=product)
 
             if info is None or info.price is None:
                 continue
@@ -148,7 +161,7 @@ class ProductChecker:
         if product is None or (not product.check_availability and not product.check_price):
             return None
 
-        info = await self.check_product(product.url, product.name)
+        info = await self.check_product(product.url, product.name, product=product)
         if info is None:
             return None
 

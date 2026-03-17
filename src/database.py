@@ -15,6 +15,9 @@ class Product:
     last_checked: datetime | None
     check_availability: bool = True
     check_price: bool = True
+    css_name: str | None = None
+    css_price: str | None = None
+    css_availability: str | None = None
 
 
 @dataclass
@@ -83,7 +86,23 @@ class Database:
                 except sqlite3.OperationalError:
                     pass  # column already exists
 
-    def add_product(self, url: str, name: str | None = None) -> Product:
+            # Migration: add CSS selector columns
+            for col in ("css_name", "css_price", "css_availability"):
+                try:
+                    conn.execute(
+                        f"ALTER TABLE products ADD COLUMN {col} TEXT"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # column already exists
+
+    def add_product(
+        self,
+        url: str,
+        name: str | None = None,
+        css_name: str | None = None,
+        css_price: str | None = None,
+        css_availability: str | None = None,
+    ) -> Product:
         """Add a product to track. Returns the product (existing or new)."""
         with self._get_connection() as conn:
             cursor = conn.execute(
@@ -95,8 +114,9 @@ class Database:
                 return self._row_to_product(row)
 
             cursor = conn.execute(
-                "INSERT INTO products (url, name) VALUES (?, ?)",
-                (url, name)
+                "INSERT INTO products (url, name, css_name, css_price, css_availability) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (url, name, css_name, css_price, css_availability),
             )
             return Product(
                 id=cursor.lastrowid,
@@ -105,6 +125,9 @@ class Database:
                 last_status=None,
                 last_price=None,
                 last_checked=None,
+                css_name=css_name,
+                css_price=css_price,
+                css_availability=css_availability,
             )
 
     def update_product_status(
@@ -250,6 +273,20 @@ class Database:
                     (1 if check_price else 0, product_id),
                 )
 
+    def update_product_selectors(
+        self,
+        product_id: int,
+        css_name: str | None = None,
+        css_price: str | None = None,
+        css_availability: str | None = None,
+    ) -> None:
+        """Update CSS selectors for a product."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET css_name = ?, css_price = ?, css_availability = ? WHERE id = ?",
+                (css_name or None, css_price or None, css_availability or None, product_id),
+            )
+
     def _row_to_product(self, row: sqlite3.Row) -> Product:
         ca = row["check_availability"]
         cp = row["check_price"]
@@ -263,6 +300,9 @@ class Database:
             if row["last_checked"] else None,
             check_availability=bool(ca if ca is not None else 1),
             check_price=bool(cp if cp is not None else 1),
+            css_name=row["css_name"] if "css_name" in row.keys() else None,
+            css_price=row["css_price"] if "css_price" in row.keys() else None,
+            css_availability=row["css_availability"] if "css_availability" in row.keys() else None,
         )
 
     def _row_to_history(self, row: sqlite3.Row) -> CheckHistory:

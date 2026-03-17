@@ -4,7 +4,7 @@ A self-hosted Docker application that monitors product prices and availability a
 
 ## Features
 
-* **Multi-store support** — monitors products on [UI.com](https://store.ui.com) and [Amazon](https://www.amazon.com) (10+ regional domains)
+* **Multi-store support** — monitors products on [UI.com](https://store.ui.com), [Amazon](https://www.amazon.com) (10+ regional domains), and most other e-commerce sites via automatic detection
 * **Web dashboard** — add, remove, and view products from your browser
 * **Price drop alerts** — notifies you when a tracked product's price decreases
 * **Availability alerts** — notifies you when an out-of-stock item comes back in stock
@@ -21,8 +21,10 @@ A self-hosted Docker application that monitors product prices and availability a
 | --- | --- |
 | UI.com | `store.ui.com` |
 | Amazon | `amazon.com`, `amazon.co.uk`, `amazon.ca`, `amazon.de`, `amazon.fr`, `amazon.it`, `amazon.es`, `amazon.co.jp`, `amazon.com.au` |
+| Dell | `dell.com` |
+| **Any other site** | Automatic detection via JSON-LD / meta tags, or custom CSS selectors |
 
-Adding support for a new store is straightforward — see [Extending](#extending) below.
+Most e-commerce websites include structured product data that the app can detect automatically. For sites where auto-detection doesn't work, you can provide custom CSS selectors — see [Adding Any Website](#adding-any-website) below.
 
 ## Requirements
 
@@ -146,7 +148,9 @@ Your check history and products persist across container restarts in the `data/`
 │  ┌────────────┐  ┌────────────┐  ┌────────────────────────┐ │
 │  │ Flask Web  │  │ APScheduler│  │   Scrapers             │ │
 │  │ UI :5000   │  │            │→ │  ├─ UI.com             │ │
-│  └────────────┘  └──────┬─────┘  │  └─ Amazon             │ │
+│  └────────────┘  └──────┬─────┘  │  ├─ Amazon             │ │
+│        │                │        │  ├─ Dell               │ │
+│        │                │        │  └─ Generic (fallback) │ │
 │        │                │        └──────────┬─────────────┘ │
 │        │                │                   │               │
 │        │         ┌──────▼───────┐    ┌──────▼─────────┐     │
@@ -162,9 +166,27 @@ Your check history and products persist across container restarts in the `data/`
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Extending
+## Adding Any Website
 
-To add support for a new website, create a new scraper in `src/scrapers/`:
+Most e-commerce sites work out of the box — just paste the product URL into "Add Product" and the app will try to automatically detect the product name, price, and availability using standard structured data (JSON-LD, Open Graph meta tags).
+
+**If auto-detection doesn't work**, you can provide custom CSS selectors:
+
+1. **Add Product** — paste the URL as usual
+2. **Expand "Advanced: Custom CSS Selectors"** on the Add Product page (or edit them later on the product detail page)
+3. **Enter CSS selectors** for the elements on the page that contain the product name, price, and/or availability status
+
+**How to find CSS selectors:**
+1. Open the product page in your browser
+2. Right-click the price (or name, or stock status) and choose "Inspect Element"
+3. Look at the element's class or ID — for example, `<span class="price-value">$29.99</span>` would use the selector `.price-value`
+4. Common patterns: `.price`, `#product-price`, `[data-price]`, `h1.product-title`
+
+You only need to provide selectors for the fields that aren't detected automatically. Leave the rest blank.
+
+## Extending (Developers)
+
+To add a custom scraper with more advanced logic (e.g., handling JavaScript-rendered pages or complex site structures), create a new scraper in `src/scrapers/`:
 
 1. Create a new file (e.g., `bestbuy.py`)
 2. Implement the `BaseScraper` interface (`can_handle` and `scrape` methods)

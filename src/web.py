@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from .checker import ProductChecker
-from .database import Database
+from .database import Database, Product
 from .log_handler import MemoryLogHandler
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,9 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     def add_product():
         url = request.form.get("url", "").strip()
         name = request.form.get("name", "").strip() or None
+        css_name = request.form.get("css_name", "").strip() or None
+        css_price = request.form.get("css_price", "").strip() or None
+        css_availability = request.form.get("css_availability", "").strip() or None
 
         if not url:
             flash("URL is required.", "error")
@@ -52,13 +55,22 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
 
         info = None
         try:
-            info = asyncio.run(checker.check_product(url))
+            # Build a temporary product to pass CSS selectors to the generic scraper
+            temp_product = Product(
+                id=None, url=url, name=name, last_status=None,
+                last_price=None, last_checked=None,
+                css_name=css_name, css_price=css_price, css_availability=css_availability,
+            )
+            info = asyncio.run(checker.check_product(url, product=temp_product))
             if info and not name:
                 name = info.name
         except Exception:
             logger.exception("Failed to fetch product info for %s", url)
 
-        product = database.add_product(url, name)
+        product = database.add_product(
+            url, name,
+            css_name=css_name, css_price=css_price, css_availability=css_availability,
+        )
 
         # Save the initial status and price so the product is immediately
         # tracked by both checkers, even when scheduled checks are paused.
@@ -143,6 +155,20 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
         if ca is None and cp is None:
             return jsonify({"error": "no fields provided"}), 400
         database.update_product_checks(product_id, ca, cp)
+        return jsonify({"ok": True})
+
+    @app.route("/api/product/<int:product_id>/selectors", methods=["POST"])
+    def api_update_selectors(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json() or {}
+        database.update_product_selectors(
+            product_id,
+            css_name=data.get("css_name"),
+            css_price=data.get("css_price"),
+            css_availability=data.get("css_availability"),
+        )
         return jsonify({"ok": True})
 
     @app.route("/api/product/<int:product_id>")

@@ -26,6 +26,30 @@
     </form>
 </div>
 
+<div class="card">
+    <details{% if product.css_name or product.css_price or product.css_availability %} open{% endif %}>
+        <summary style="cursor: pointer; font-weight: 500; margin-bottom: 0.5rem;">
+            Custom CSS Selectors
+        </summary>
+        <p style="font-size: 0.85rem; color: #6c757d; margin-bottom: 0.75rem;">
+            Override automatic detection by providing CSS selectors. Leave blank to use auto-detection.
+        </p>
+        <form id="selectors-form">
+            <label for="css_name">Product Name Selector</label>
+            <input type="text" id="css_name" name="css_name" value="{{ product.css_name or '' }}" placeholder="e.g. h1.product-title">
+
+            <label for="css_price">Price Selector</label>
+            <input type="text" id="css_price" name="css_price" value="{{ product.css_price or '' }}" placeholder="e.g. .price-value">
+
+            <label for="css_availability">Availability Selector</label>
+            <input type="text" id="css_availability" name="css_availability" value="{{ product.css_availability or '' }}" placeholder="e.g. .stock-status">
+
+            <button type="submit" class="btn" style="margin-top: 0.25rem;">Save Selectors</button>
+            <span id="selectors-msg" style="margin-left: 0.75rem; font-size: 0.85rem;"></span>
+        </form>
+    </details>
+</div>
+
 <h2 style="margin-bottom: 1rem;">Price History</h2>
 
 <div class="card" id="chart-card">
@@ -217,6 +241,34 @@
     /* Load chart on page open, then refresh every 30 s */
     refresh();
     setInterval(refresh, 30000);
+
+    /* CSS Selectors form */
+    var selForm = document.getElementById("selectors-form");
+    if (selForm) {
+        selForm.addEventListener("submit", function(e) {
+            e.preventDefault();
+            var msg = document.getElementById("selectors-msg");
+            fetch("/api/product/" + productId + "/selectors", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    css_name: document.getElementById("css_name").value.trim(),
+                    css_price: document.getElementById("css_price").value.trim(),
+                    css_availability: document.getElementById("css_availability").value.trim(),
+                }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                msg.textContent = d.ok ? "Saved!" : "Error saving selectors.";
+                msg.style.color = d.ok ? "#198754" : "#dc3545";
+                setTimeout(function() { msg.textContent = ""; }, 3000);
+            })
+            .catch(function() {
+                msg.textContent = "Error saving selectors.";
+                msg.style.color = "#dc3545";
+            });
+        });
+    }
 })();
 </script>
 {% endblock %}
