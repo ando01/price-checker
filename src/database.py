@@ -247,6 +247,14 @@ class Database:
                 (key, value),
             )
 
+    def rename_product(self, product_id: int, name: str) -> None:
+        """Rename a product."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET name = ? WHERE id = ?",
+                (name, product_id),
+            )
+
     def update_product_checks(
         self,
         product_id: int,

@@ -5,11 +5,26 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime, timezone
 
+from urllib.parse import urlparse
+
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 
 from .checker import ProductChecker
 from .database import Database, Product
 from .log_handler import MemoryLogHandler
+
+
+def _store_name(url: str) -> str:
+    """Extract a human-friendly store name from a product URL."""
+    host = urlparse(url).hostname or url
+    # Strip common prefixes and get the main domain name
+    parts = host.lower().split(".")
+    # Remove common subdomains and TLD, keep the main domain
+    skip = {"www", "store", "shop", "m", "mobile"}
+    for part in parts:
+        if part not in skip:
+            return part.capitalize()
+    return parts[0].capitalize() if parts else host
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +36,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.secret_key = "price-checker-secret"
+    app.jinja_env.filters["store_name"] = _store_name
 
     @app.route("/")
     def index():
@@ -116,6 +132,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 "id": p.id,
                 "name": p.name,
                 "url": p.url,
+                "store": _store_name(p.url),
                 "last_status": p.last_status,
                 "last_price": p.last_price,
                 "prev_price": prev_prices.get(p.id),
@@ -155,6 +172,18 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
         if ca is None and cp is None:
             return jsonify({"error": "no fields provided"}), 400
         database.update_product_checks(product_id, ca, cp)
+        return jsonify({"ok": True})
+
+    @app.route("/api/product/<int:product_id>/rename", methods=["POST"])
+    def api_rename_product(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json() or {}
+        name = data.get("name", "").strip()
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+        database.rename_product(product_id, name)
         return jsonify({"ok": True})
 
     @app.route("/api/product/<int:product_id>/selectors", methods=["POST"])

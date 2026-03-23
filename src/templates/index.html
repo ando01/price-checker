@@ -37,6 +37,7 @@
     <thead>
         <tr>
             <th>Name</th>
+            <th>Store</th>
             <th>Status</th>
             <th>Price</th>
             <th>Last Checked</th>
@@ -46,7 +47,12 @@
     <tbody id="product-body">
         {% for p in products %}
         <tr data-id="{{ p.id }}">
-            <td><a href="/product/{{ p.id }}">{{ p.name or p.url }}</a></td>
+            <td>
+                <a href="/product/{{ p.id }}">{{ p.name or p.url }}</a>
+                <button class="rename-btn" data-id="{{ p.id }}" data-name="{{ p.name or p.url }}" title="Rename"
+                        style="background:none;border:none;cursor:pointer;font-size:0.75rem;color:#6c757d;margin-left:0.3rem;padding:0;">&#9998;</button>
+            </td>
+            <td style="white-space:nowrap;">{{ p.url | store_name }}</td>
             <td>
                 {% if p.last_status == "available" %}
                     <span class="status available">Available</span>
@@ -146,8 +152,11 @@
                 if (!tbody) return;
                 var rows = products.map(function(p) {
                     var name = p.name || p.url;
+                    var escapedName = name.replace(/"/g, '&quot;').replace(/</g, '&lt;');
                     return '<tr data-id="' + p.id + '">'
-                        + '<td><a href="/product/' + p.id + '">' + name + '</a></td>'
+                        + '<td><a href="/product/' + p.id + '">' + escapedName + '</a>'
+                        + '<button class="rename-btn" data-id="' + p.id + '" data-name="' + escapedName + '" title="Rename" style="background:none;border:none;cursor:pointer;font-size:0.75rem;color:#6c757d;margin-left:0.3rem;padding:0;">&#9998;</button></td>'
+                        + '<td style="white-space:nowrap;">' + (p.store || "") + '</td>'
                         + '<td>' + statusBadge(p.last_status) + '</td>'
                         + '<td>' + fmtPrice(p.last_price) + fmtTrend(p.last_price, p.prev_price) + '</td>'
                         + '<td>' + (p.last_checked || "\u2014") + '</td>'
@@ -259,6 +268,26 @@
     fetchStatus();
     setInterval(fetchStatus, 15000);
     setInterval(tick, 1000);
+
+    /* --- Rename product --- */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.rename-btn');
+        if (!btn) return;
+        var id = btn.dataset.id;
+        var current = btn.dataset.name;
+        var newName = prompt('Rename product:', current);
+        if (newName === null || newName.trim() === '' || newName.trim() === current) return;
+        fetch('/api/product/' + id + '/rename', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name: newName.trim() })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) refreshProducts();
+        })
+        .catch(function() {});
+    });
 })();
 </script>
 {% endblock %}
