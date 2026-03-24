@@ -140,6 +140,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 if p.last_checked else None,
                 "check_availability": p.check_availability,
                 "check_price": p.check_price,
+                "notify": p.notify,
             }
             for p in products
         ])
@@ -172,6 +173,29 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
         if ca is None and cp is None:
             return jsonify({"error": "no fields provided"}), 400
         database.update_product_checks(product_id, ca, cp)
+        return jsonify({"ok": True})
+
+    @app.route("/api/product/<int:product_id>/notify", methods=["POST"])
+    def api_update_product_notify(product_id: int):
+        data = request.get_json() or {}
+        notify = data.get("notify")
+        if notify is None:
+            return jsonify({"error": "notify field required"}), 400
+        database.update_product_notify(product_id, bool(notify))
+        return jsonify({"ok": True})
+
+    @app.route("/api/product/<int:product_id>/test-notify", methods=["POST"])
+    def api_test_notify(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        try:
+            success = asyncio.run(checker.notifier.send_test_for_product(product))
+        except Exception:
+            logger.exception("test-notify failed for product %s", product_id)
+            return jsonify({"error": "notification failed"}), 500
+        if not success:
+            return jsonify({"error": "notification failed"}), 500
         return jsonify({"ok": True})
 
     @app.route("/api/product/<int:product_id>/rename", methods=["POST"])

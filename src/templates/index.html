@@ -41,6 +41,7 @@
             <th>Status</th>
             <th>Price</th>
             <th>Last Checked</th>
+            <th>Notify</th>
             <th>Checks</th>
         </tr>
     </thead>
@@ -80,6 +81,16 @@
                 {% endif %}
             </td>
             <td>{{ p.last_checked.strftime("%Y-%m-%d %H:%M") if p.last_checked else "—" }}</td>
+            <td>
+                <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap;">
+                    <input type="checkbox" class="notify-toggle" data-id="{{ p.id }}" {{ "checked" if p.notify }}>
+                    On
+                </label>
+                <button class="btn test-notify-btn" data-id="{{ p.id }}"
+                        style="font-size: 0.75rem; padding: 0.15rem 0.5rem; margin-top: 0.4rem; width: 100%;">
+                    Test
+                </button>
+            </td>
             <td>
                 <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap;">
                     <input type="checkbox" class="check-toggle" data-id="{{ p.id }}" data-field="check_availability" {{ "checked" if p.check_availability }}>
@@ -130,6 +141,14 @@
             return '<span class="price-trend flat" title="No change since last check">\u2192 No change</span>';
         }
     }
+    function notifyCell(id, notify) {
+        return '<td>'
+            + '<label style="font-size:0.8rem;display:flex;align-items:center;gap:0.25rem;cursor:pointer;white-space:nowrap;">'
+            + '<input type="checkbox" class="notify-toggle" data-id="' + id + '"' + (notify ? ' checked' : '') + '> On'
+            + '</label>'
+            + '<button class="btn test-notify-btn" data-id="' + id + '" style="font-size:0.75rem;padding:0.15rem 0.5rem;margin-top:0.4rem;width:100%;">Test</button>'
+            + '</td>';
+    }
     function checkboxCell(id, ca, cp) {
         var disabled = (!ca && !cp) ? ' disabled' : '';
         return '<td>'
@@ -160,6 +179,7 @@
                         + '<td>' + statusBadge(p.last_status) + '</td>'
                         + '<td>' + fmtPrice(p.last_price) + fmtTrend(p.last_price, p.prev_price) + '</td>'
                         + '<td>' + (p.last_checked || "\u2014") + '</td>'
+                        + notifyCell(p.id, p.notify)
                         + checkboxCell(p.id, p.check_availability, p.check_price)
                         + '</tr>';
                 }).join("");
@@ -184,6 +204,39 @@
         }).catch(function() {
             cb.checked = !cb.checked; // revert on error
         });
+    });
+
+    /* --- Per-product notify toggle --- */
+    document.addEventListener('change', function(e) {
+        var cb = e.target;
+        if (!cb.classList.contains('notify-toggle')) return;
+        var id = cb.dataset.id;
+        fetch('/api/product/' + id + '/notify', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ notify: cb.checked })
+        }).catch(function() {
+            cb.checked = !cb.checked;
+        });
+    });
+
+    /* --- Test Notify buttons --- */
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.test-notify-btn');
+        if (!btn) return;
+        var id = btn.dataset.id;
+        btn.disabled = true;
+        btn.textContent = 'Sending\u2026';
+        fetch('/api/product/' + id + '/test-notify', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.textContent = data.ok ? 'Sent!' : 'Error';
+                setTimeout(function() { btn.textContent = 'Test'; btn.disabled = false; }, 2000);
+            })
+            .catch(function() {
+                btn.textContent = 'Error';
+                setTimeout(function() { btn.textContent = 'Test'; btn.disabled = false; }, 2000);
+            });
     });
 
     /* --- Check Now buttons --- */

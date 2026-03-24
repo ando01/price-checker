@@ -100,7 +100,7 @@ class ProductChecker:
             )
 
             # Send notification if item just became available
-            if current_status == "available" and previous_status != "available":
+            if product.notify and current_status == "available" and previous_status != "available":
                 logger.info(f"Item became available: {info.name}")
                 await self.notifier.notify_available(info)
 
@@ -144,7 +144,7 @@ class ProductChecker:
             )
 
             # Notify on price drop only
-            if new_price < old_price:
+            if product.notify and new_price < old_price:
                 logger.info(
                     f"Price drop for {product.name or product.url}: "
                     f"${old_price:.2f} → ${new_price:.2f}"
@@ -177,11 +177,11 @@ class ProductChecker:
             name=info.name if not product.name else None,
         )
 
-        if product.check_availability and current_status == "available" and previous_status != "available":
+        if product.notify and product.check_availability and current_status == "available" and previous_status != "available":
             logger.info(f"Item became available: {info.name}")
             await self.notifier.notify_available(info)
 
-        if product.check_price and info.price is not None and old_price is not None:
+        if product.notify and product.check_price and info.price is not None and old_price is not None:
             if info.price < old_price:
                 logger.info(
                     f"Price drop for {product.name or product.url}: "

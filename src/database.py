@@ -15,6 +15,7 @@ class Product:
     last_checked: datetime | None
     check_availability: bool = True
     check_price: bool = True
+    notify: bool = True
     css_name: str | None = None
     css_price: str | None = None
     css_availability: str | None = None
@@ -85,6 +86,14 @@ class Database:
                     )
                 except sqlite3.OperationalError:
                     pass  # column already exists
+
+            # Migration: add per-product notify flag
+            try:
+                conn.execute(
+                    "ALTER TABLE products ADD COLUMN notify INTEGER DEFAULT 1"
+                )
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
             # Migration: add CSS selector columns
             for col in ("css_name", "css_price", "css_availability"):
@@ -281,6 +290,14 @@ class Database:
                     (1 if check_price else 0, product_id),
                 )
 
+    def update_product_notify(self, product_id: int, notify: bool) -> None:
+        """Update per-product notification flag."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET notify = ? WHERE id = ?",
+                (1 if notify else 0, product_id),
+            )
+
     def update_product_selectors(
         self,
         product_id: int,
@@ -308,6 +325,7 @@ class Database:
             if row["last_checked"] else None,
             check_availability=bool(ca if ca is not None else 1),
             check_price=bool(cp if cp is not None else 1),
+            notify=bool(row["notify"] if "notify" in row.keys() and row["notify"] is not None else 1),
             css_name=row["css_name"] if "css_name" in row.keys() else None,
             css_price=row["css_price"] if "css_price" in row.keys() else None,
             css_availability=row["css_availability"] if "css_availability" in row.keys() else None,

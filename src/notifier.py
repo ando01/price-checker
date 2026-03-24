@@ -109,6 +109,41 @@ class PushoverNotifier:
             logger.error(f"Failed to send notification: {e}")
             return False
 
+    async def send_test_for_product(self, product: Product) -> bool:
+        """Send a test notification for a specific product."""
+        if not self.config.user_key or not self.config.api_token:
+            logger.error("Pushover credentials not configured")
+            return False
+
+        payload = {
+            "token": self.config.api_token,
+            "user": self.config.user_key,
+            "title": "Price Checker Test",
+            "message": f"Test notification for: {product.name or product.url}",
+            "url": product.url,
+            "url_title": "View Product",
+            "priority": 0,
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    PUSHOVER_API_URL,
+                    data=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+            logger.info(f"Test notification sent for: {product.name or product.url}")
+            return True
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Pushover API error: {e.response.status_code} - {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send test notification: {e}")
+            return False
+
     async def send_test(self) -> bool:
         """Send a test notification to verify configuration."""
         if not self.config.user_key or not self.config.api_token:
