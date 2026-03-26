@@ -20,8 +20,10 @@ async def fetch_page(url: str, headers: dict) -> str:
             from curl_cffi.requests import AsyncSession
 
             async with AsyncSession() as s:
+                # Don't pass custom headers — let curl_cffi's browser
+                # impersonation set its own consistent TLS + header fingerprint.
                 r = await s.get(
-                    url, headers=headers, impersonate="chrome", timeout=30,
+                    url, impersonate="chrome", timeout=30,
                 )
                 r.raise_for_status()
                 return r.text
