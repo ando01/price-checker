@@ -2,10 +2,10 @@ import json
 import logging
 import re
 
-import httpx
 from bs4 import BeautifulSoup
 
 from .base import BaseScraper, ProductInfo
+from .http import fetch_page
 
 logger = logging.getLogger(__name__)
 
@@ -39,16 +39,7 @@ class DellScraper(BaseScraper):
         return bool(self.DOMAIN_PATTERN.search(url))
 
     async def scrape(self, url: str) -> ProductInfo:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                url,
-                headers=self.HEADERS,
-                follow_redirects=True,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-
-        html = response.text
+        html = await fetch_page(url, self.HEADERS)
         soup = BeautifulSoup(html, "lxml")
 
         # Log a snippet of the response to help diagnose parsing failures

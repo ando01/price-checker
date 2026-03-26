@@ -3,10 +3,10 @@ import logging
 import re
 from dataclasses import dataclass
 
-import httpx
 from bs4 import BeautifulSoup
 
 from .base import BaseScraper, ProductInfo
+from .http import fetch_page
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +49,8 @@ class GenericScraper(BaseScraper):
 
     async def scrape(self, url: str, selectors: CSSSelectors | None = None) -> ProductInfo:
         """Scrape product info using multiple strategies."""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                url,
-                headers=self.HEADERS,
-                follow_redirects=True,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "lxml")
+        html = await fetch_page(url, self.HEADERS)
+        soup = BeautifulSoup(html, "lxml")
 
         # Strategy 1: JSON-LD structured data
         json_ld = self._extract_json_ld(soup)

@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for lxml (needed if no binary wheel available)
+# Install system dependencies for lxml and curl_cffi
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libxml2-dev libxslt-dev \
+    && apt-get install -y --no-install-recommends libxml2-dev libxslt-dev gcc libcurl4-openssl-dev libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

@@ -1,10 +1,10 @@
 import json
 import re
 
-import httpx
 from bs4 import BeautifulSoup
 
 from .base import BaseScraper, ProductInfo
+from .http import fetch_page
 
 
 class UIStoreScraper(BaseScraper):
@@ -20,20 +20,13 @@ class UIStoreScraper(BaseScraper):
 
         UI.com pages include JSON-LD structured data with product information.
         """
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                url,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                                  "Chrome/120.0.0.0 Safari/537.36"
-                },
-                follow_redirects=True,
-                timeout=30.0,
-            )
-            response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "lxml")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+        }
+        html = await fetch_page(url, headers)
+        soup = BeautifulSoup(html, "lxml")
 
         # Look for JSON-LD structured data
         json_ld = self._extract_json_ld(soup)
