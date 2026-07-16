@@ -117,11 +117,15 @@ class ProductChecker:
         """Check all configured products and send notifications for newly available items."""
         logger.info("Starting product check...")
 
-        # Ensure all configured products are in the database
+        # Sync configured products into the database
+        configured_urls = set()
         for product_config in self.config.products:
             self.database.add_product(product_config.url, product_config.name)
+            configured_urls.add(product_config.url)
 
-        products = self.database.get_all_products()
+        # Only check products that are in the current config
+        all_products = self.database.get_all_products()
+        products = [p for p in all_products if p.url in configured_urls]
 
         if not products:
             logger.warning("No products configured to check")
@@ -162,10 +166,18 @@ class ProductChecker:
         logger.info("Product check complete")
 
     async def check_all_prices(self) -> None:
-        """Check all products for price drops and send notifications."""
+        """Check all configured products for price drops and send notifications."""
         logger.info("Starting price check...")
 
-        products = self.database.get_all_products()
+        # Sync configured products into the database
+        configured_urls = set()
+        for product_config in self.config.products:
+            self.database.add_product(product_config.url, product_config.name)
+            configured_urls.add(product_config.url)
+
+        # Only check products that are in the current config
+        all_products = self.database.get_all_products()
+        products = [p for p in all_products if p.url in configured_urls]
 
         if not products:
             logger.warning("No products configured to check")
