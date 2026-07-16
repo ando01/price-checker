@@ -4,6 +4,4 @@ pushover:
 
 check_interval_minutes: 5
 
-products:
-  - url: "https://store.ui.com/us/en/category/wifi-special-devices/products/utr"
-    name: "UniFi Travel Router"  # Optional, will be auto-detected
+products: []
