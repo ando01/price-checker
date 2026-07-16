@@ -461,7 +461,7 @@ class Database:
             target_price=row["target_price"] if "target_price" in row.keys() else None,
             lowest_price=row["lowest_price"] if "lowest_price" in row.keys() else None,
             lowest_price_date=datetime.fromisoformat(row["lowest_price_date"])
-            if row.get("lowest_price_date") else None,
+            if row["lowest_price_date"] else None,
             check_availability=bool(ca if ca is not None else 1),
             check_price=bool(cp if cp is not None else 1),
             notify=bool(row["notify"] if "notify" in row.keys() and row["notify"] is not None else 1),
