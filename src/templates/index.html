@@ -40,6 +40,8 @@
             <th>Store</th>
             <th>Status</th>
             <th>Price</th>
+            <th>Target</th>
+            <th>Lowest</th>
             <th>Last Checked</th>
             <th>Notify</th>
             <th>Checks</th>
@@ -80,6 +82,8 @@
                     {% endif %}
                 {% endif %}
             </td>
+            <td>{{ "$%.2f"|format(p.target_price) if p.target_price is not none else "—" }}</td>
+            <td>{{ "$%.2f"|format(p.lowest_price) if p.lowest_price is not none else "—" }}</td>
             <td>{{ p.last_checked.strftime("%Y-%m-%d %H:%M") if p.last_checked else "—" }}</td>
             <td>
                 <label style="font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; cursor: pointer; white-space: nowrap;">
@@ -178,6 +182,8 @@
                         + '<td style="white-space:nowrap;">' + (p.store || "") + '</td>'
                         + '<td>' + statusBadge(p.last_status) + '</td>'
                         + '<td>' + fmtPrice(p.last_price) + fmtTrend(p.last_price, p.prev_price) + '</td>'
+                        + '<td>' + fmtPrice(p.target_price) + '</td>'
+                        + '<td>' + fmtPrice(p.lowest_price) + '</td>'
                         + '<td>' + (p.last_checked || "\u2014") + '</td>'
                         + notifyCell(p.id, p.notify)
                         + checkboxCell(p.id, p.check_availability, p.check_price)

@@ -109,6 +109,56 @@ class PushoverNotifier:
             logger.error(f"Failed to send notification: {e}")
             return False
 
+    async def notify_target_price_reached(
+        self, product: Product, target_price: float, current_price: float
+    ) -> bool:
+        """Send notification that a product is available at or below target price.
+
+        Returns True if notification was sent successfully.
+        """
+        if not self.config.user_key or not self.config.api_token:
+            logger.warning("Pushover credentials not configured, skipping notification")
+            return False
+
+        message = (
+            f"{product.name or product.url}\n\n"
+            f"Target: ${target_price:.2f}\n"
+            f"Now: ${current_price:.2f}"
+        )
+
+        payload = {
+            "token": self.config.api_token,
+            "user": self.config.user_key,
+            "title": "Target Price Reached!",
+            "message": message,
+            "url": product.url,
+            "url_title": "View Product",
+            "priority": 1,
+            "sound": "cashregister",
+        }
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    PUSHOVER_API_URL,
+                    data=payload,
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+
+            logger.info(
+                f"Target price notification sent for: {product.name or product.url} "
+                f"(${current_price:.2f} ≤ ${target_price:.2f})"
+            )
+            return True
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Pushover API error: {e.response.status_code} - {e.response.text}")
+            return False
+        except httpx.RequestError as e:
+            logger.error(f"Failed to send notification: {e}")
+            return False
+
     async def send_test_for_product(self, product: Product) -> bool:
         """Send a test notification for a specific product."""
         if not self.config.user_key or not self.config.api_token:

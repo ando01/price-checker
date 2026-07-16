@@ -61,6 +61,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
     def add_product():
         url = request.form.get("url", "").strip()
         name = request.form.get("name", "").strip() or None
+        target_price = request.form.get("target_price", "").strip()
         css_name = request.form.get("css_name", "").strip() or None
         css_price = request.form.get("css_price", "").strip() or None
         css_availability = request.form.get("css_availability", "").strip() or None
@@ -68,6 +69,13 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
         if not url:
             flash("URL is required.", "error")
             return redirect(url_for("add_form"))
+
+        target_price_val = None
+        if target_price:
+            try:
+                target_price_val = float(target_price)
+            except (ValueError, TypeError):
+                pass
 
         info = None
         try:
@@ -87,6 +95,8 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             url, name,
             css_name=css_name, css_price=css_price, css_availability=css_availability,
         )
+        if target_price_val is not None and product.id is not None:
+            database.update_product_target_price(product.id, target_price_val)
 
         # Save the initial status and price so the product is immediately
         # tracked by both checkers, even when scheduled checks are paused.
@@ -138,6 +148,10 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 "prev_price": prev_prices.get(p.id),
                 "last_checked": p.last_checked.strftime("%Y-%m-%d %H:%M")
                 if p.last_checked else None,
+                "target_price": p.target_price,
+                "lowest_price": p.lowest_price,
+                "lowest_price_date": p.lowest_price_date.strftime("%Y-%m-%d %H:%M")
+                if p.lowest_price_date else None,
                 "check_availability": p.check_availability,
                 "check_price": p.check_price,
                 "notify": p.notify,
@@ -224,12 +238,30 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
         )
         return jsonify({"ok": True})
 
+    @app.route("/api/product/<int:product_id>/target-price", methods=["POST"])
+    def api_update_target_price(product_id: int):
+        product = database.get_product_by_id(product_id)
+        if product is None:
+            return jsonify({"error": "not found"}), 404
+        data = request.get_json() or {}
+        target_price = data.get("target_price")
+        if target_price is not None:
+            try:
+                target_price = float(target_price)
+                if target_price < 0:
+                    raise ValueError
+            except (ValueError, TypeError):
+                return jsonify({"error": "invalid target price"}), 400
+        database.update_product_target_price(product_id, target_price)
+        return jsonify({"ok": True})
+
     @app.route("/api/product/<int:product_id>")
     def api_product(product_id: int):
         product = database.get_product_by_id(product_id)
         if product is None:
             return jsonify({"error": "not found"}), 404
-        history = database.get_product_history(product_id, limit=100)
+        # Use sampled history for charts (up to 200 points)
+        history = database.get_product_history_sampled(product_id, max_points=200)
         return jsonify({
             "id": product.id,
             "name": product.name,
@@ -238,11 +270,15 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             "last_price": product.last_price,
             "last_checked": product.last_checked.strftime("%Y-%m-%d %H:%M:%S")
             if product.last_checked else None,
+            "target_price": product.target_price,
+            "lowest_price": product.lowest_price,
+            "lowest_price_date": product.lowest_price_date.strftime("%Y-%m-%d")
+            if product.lowest_price_date else None,
             "history": [
                 {
-                    "status": h.status,
-                    "price": h.price,
-                    "checked_at": h.checked_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "status": h["status"],
+                    "price": h["price"],
+                    "checked_at": h["checked_at"],
                 }
                 for h in history
             ],

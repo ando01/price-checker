@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 
 from .config import Config
 from .database import Database, Product
@@ -143,17 +144,53 @@ class ProductChecker:
                 name=info.name if not product.name else None,
             )
 
-            # Notify on price drop only
-            if product.notify and new_price < old_price:
+            # Update lowest price seen
+            if new_price is not None and (
+                product.lowest_price is None or new_price < product.lowest_price
+            ):
+                self.database.update_product_lowest_price(product.id, new_price, datetime.now())
+
+            # Notify on price drop only (no target set)
+            if product.notify and new_price < old_price and product.target_price is None:
                 logger.info(
                     f"Price drop for {product.name or product.url}: "
                     f"${old_price:.2f} → ${new_price:.2f}"
                 )
                 await self.notifier.notify_price_drop(product, old_price, new_price)
 
+            # Notify when item is available AND price is at or below target
+            if (
+                product.notify
+                and product.target_price is not None
+                and info.available
+                and new_price <= product.target_price
+            ):
+                logger.info(
+                    f"Target price reached for {product.name or product.url}: "
+                    f"${new_price:.2f} ≤ ${product.target_price:.2f}"
+                )
+                await self.notifier.notify_target_price_reached(
+                    product, product.target_price, new_price
+                )
+
             await asyncio.sleep(1)
 
         logger.info("Price check complete")
+
+    async def _update_lowest_price(
+        self, product: Product, new_price: float, now: datetime | None = None
+    ) -> None:
+        """Update the product's lowest price if the new price is lower."""
+        if new_price is not None and (
+            product.lowest_price is None or new_price < product.lowest_price
+        ):
+            self.database.update_product_lowest_price(
+                product.id, new_price, now or datetime.now()
+            )
+            logger.info(
+                f"New lowest price for {product.name or product.url}: "
+                f"${new_price:.2f}"
+            )
 
     async def check_one(self, product_id: int) -> ProductInfo | None:
         """Check a single product by ID, update the DB, and fire notifications."""
@@ -182,12 +219,30 @@ class ProductChecker:
             await self.notifier.notify_available(info)
 
         if product.notify and product.check_price and info.price is not None and old_price is not None:
-            if info.price < old_price:
+            # Notify on price drop only (no target set)
+            if info.price < old_price and product.target_price is None:
                 logger.info(
                     f"Price drop for {product.name or product.url}: "
                     f"${old_price:.2f} → ${info.price:.2f}"
                 )
                 await self.notifier.notify_price_drop(product, old_price, info.price)
+
+            # Notify when item is available AND price is at or below target
+            if (
+                product.target_price is not None
+                and info.available
+                and info.price <= product.target_price
+            ):
+                logger.info(
+                    f"Target price reached for {product.name or product.url}: "
+                    f"${info.price:.2f} ≤ ${product.target_price:.2f}"
+                )
+                await self.notifier.notify_target_price_reached(
+                    product, product.target_price, info.price
+                )
+
+        # Update lowest price seen
+        await self._update_lowest_price(product, new_price)
 
         return info
 

@@ -13,6 +13,9 @@ class Product:
     last_status: str | None
     last_price: float | None
     last_checked: datetime | None
+    target_price: float | None = None
+    lowest_price: float | None = None
+    lowest_price_date: datetime | None = None
     check_availability: bool = True
     check_price: bool = True
     notify: bool = True
@@ -94,6 +97,22 @@ class Database:
                 )
             except sqlite3.OperationalError:
                 pass  # column already exists
+
+            # Migration: add target_price column
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN target_price REAL")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: add lowest_price and lowest_price_date columns
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN lowest_price REAL")
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN lowest_price_date TIMESTAMP")
+            except sqlite3.OperationalError:
+                pass
 
             # Migration: add CSS selector columns
             for col in ("css_name", "css_price", "css_availability"):
@@ -312,6 +331,122 @@ class Database:
                 (css_name or None, css_price or None, css_availability or None, product_id),
             )
 
+    def update_product_target_price(
+        self, product_id: int, target_price: float | None
+    ) -> None:
+        """Update a product's target price (nullable)."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET target_price = ? WHERE id = ?",
+                (target_price, product_id),
+            )
+
+    def update_product_lowest_price(
+        self, product_id: int, lowest_price: float | None, lowest_date: datetime | None
+    ) -> None:
+        """Update a product's lowest price and the date it was set."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET lowest_price = ?, lowest_price_date = ? WHERE id = ?",
+                (lowest_price, lowest_date, product_id),
+            )
+
+    def get_product_history_sampled(
+        self, product_id: int, max_points: int = 200
+    ) -> list[dict]:
+        """Get check history with sampling for chart display.
+
+        Returns up to max_points records, sampled by time range:
+        - Last 7 days: every point
+        - 7-30 days: one per day
+        - 30-180 days: one per week
+        - Oldest records: one per month
+        """
+        with self._get_connection() as conn:
+            # Get all records in chronological order
+            cursor = conn.execute(
+                """SELECT status, price, checked_at
+                FROM check_history
+                WHERE product_id = ?
+                ORDER BY checked_at ASC""",
+                (product_id,),
+            )
+            rows = cursor.fetchall()
+            if not rows:
+                return []
+
+            if len(rows) <= max_points:
+                # No sampling needed
+                return [
+                    {
+                        "status": row["status"],
+                        "price": row["price"],
+                        "checked_at": row["checked_at"],
+                    }
+                    for row in rows
+                ]
+
+            # Sample the data
+            from datetime import timedelta
+            now = datetime.now()
+            seven_days_ago = now - timedelta(days=7)
+            thirty_days_ago = now - timedelta(days=30)
+            one_hundred_eighty_days_ago = now - timedelta(days=180)
+
+            # First pass: collect all data into time buckets
+            all_points = []
+            for row in rows:
+                checked = datetime.fromisoformat(row["checked_at"])
+                bucket_key = self._get_bucket_key(checked, now)
+                all_points.append({
+                    "status": row["status"],
+                    "price": row["price"],
+                    "checked_at": row["checked_at"],
+                    "bucket": bucket_key,
+                })
+
+            # Deduplicate by bucket, keeping the most recent in each bucket
+            seen_buckets: dict[str, dict] = {}
+            for point in all_points:
+                seen_buckets[point["bucket"]] = point
+
+            # Sort by checked_at descending and take top max_points
+            sampled = sorted(
+                seen_buckets.values(),
+                key=lambda p: p["checked_at"],
+                reverse=True,
+            )[:max_points]
+
+            # Return in chronological order
+            sampled.sort(key=lambda p: p["checked_at"])
+            return [
+                {
+                    "status": p["status"],
+                    "price": p["price"],
+                    "checked_at": p["checked_at"],
+                }
+                for p in sampled
+            ]
+
+    @staticmethod
+    def _get_bucket_key(checked_at: datetime, now: datetime) -> str:
+        """Generate a time bucket key based on how old the record is."""
+        delta = now - checked_at
+        days = delta.days
+
+        if days < 7:
+            # Every 30 minutes
+            return checked_at.strftime("%Y-%m-%d %H:") + f"{checked_at.minute // 30 * 30:02d}"
+        elif days < 30:
+            # Every day
+            return checked_at.strftime("%Y-%m-%d")
+        elif days < 180:
+            # Every week (start of week)
+            return checked_at.strftime("%Y-W%W")
+        else:
+            # Every month
+            return checked_at.strftime("%Y-%m")
+
     def _row_to_product(self, row: sqlite3.Row) -> Product:
         ca = row["check_availability"]
         cp = row["check_price"]
@@ -323,6 +458,10 @@ class Database:
             last_price=row["last_price"],
             last_checked=datetime.fromisoformat(row["last_checked"])
             if row["last_checked"] else None,
+            target_price=row["target_price"] if "target_price" in row.keys() else None,
+            lowest_price=row["lowest_price"] if "lowest_price" in row.keys() else None,
+            lowest_price_date=datetime.fromisoformat(row["lowest_price_date"])
+            if row.get("lowest_price_date") else None,
             check_availability=bool(ca if ca is not None else 1),
             check_price=bool(cp if cp is not None else 1),
             notify=bool(row["notify"] if "notify" in row.keys() and row["notify"] is not None else 1),

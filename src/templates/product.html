@@ -20,6 +20,27 @@
         </span>
     </p>
     <p style="margin-top: 0.5rem;"><strong>Price:</strong> <span id="detail-price">{{ "$%.2f"|format(product.last_price) if product.last_price is not none else "—" }}</span></p>
+    <p style="margin-top: 0.5rem;"><strong>Target Price:</strong>
+        <span id="detail-target">
+            {{ "$%.2f"|format(product.target_price) if product.target_price is not none else "Not set" }}
+        </span>
+        <span id="target-edit" style="display:none; margin-left:0.5rem;">
+            <input type="number" id="target-input" step="0.01" min="0" value="{{ product.target_price or '' }}"
+                   style="width:100px; padding:0.2rem; border:1px solid #ccc; border-radius:4px; font-size:0.9rem;">
+            <button id="target-save" class="btn" style="padding:0.2rem 0.5rem; font-size:0.85rem; margin-left:0.25rem;">Save</button>
+            <button id="target-clear" class="btn" style="padding:0.2rem 0.5rem; font-size:0.85rem; background:#6c757d; margin-left:0.25rem;">Clear</button>
+            <button id="target-cancel" class="btn" style="padding:0.2rem 0.5rem; font-size:0.85rem; background:#6c757d; margin-left:0.25rem;">Cancel</button>
+        </span>
+        <span id="target-display"><button id="target-edit-btn" class="btn" style="padding:0.15rem 0.5rem; font-size:0.85rem; margin-left:0.5rem;">Edit</button></span>
+    </p>
+    <p style="margin-top: 0.5rem;"><strong>Lowest Price:</strong>
+        <span id="detail-lowest">
+            {{ "$%.2f"|format(product.lowest_price) if product.lowest_price is not none else "Not set" }}
+        </span>
+        <span id="lowest-date" style="font-size:0.85rem; color:#6c757d; margin-left:0.5rem;">
+            {% if product.lowest_price_date %} on {{ product.lowest_price_date.strftime("%Y-%m-%d") }}{% endif %}
+        </span>
+    </p>
     <p style="margin-top: 0.5rem;"><strong>Last Checked:</strong> <span id="detail-checked">{{ product.last_checked.strftime("%Y-%m-%d %H:%M:%S") if product.last_checked else "—" }}</span></p>
     <form method="post" action="/product/{{ product.id }}/delete" style="margin-top: 1rem;" onsubmit="return confirm('Remove this product and all its history?');">
         <button type="submit" class="btn btn-danger">Remove Product</button>
@@ -233,6 +254,11 @@
                 document.getElementById("detail-status").innerHTML = statusBadge(d.last_status);
                 document.getElementById("detail-price").textContent = fmtPrice(d.last_price);
                 document.getElementById("detail-checked").textContent = d.last_checked || "\u2014";
+                document.getElementById("detail-target").textContent = d.target_price != null ? "$" + Number(d.target_price).toFixed(2) : "Not set";
+                document.getElementById("detail-lowest").textContent = d.lowest_price != null ? "$" + Number(d.lowest_price).toFixed(2) : "Not set";
+                if (d.lowest_price_date) {
+                    document.getElementById("lowest-date").textContent = " on " + d.lowest_price_date;
+                }
                 if (d.history) updateChart(d.history);
             })
             .catch(function() {});
@@ -241,6 +267,55 @@
     /* Load chart on page open, then refresh every 30 s */
     refresh();
     setInterval(refresh, 30000);
+
+    /* Target Price edit */
+    var targetEditBtn = document.getElementById("target-edit-btn");
+    var targetEditDiv = document.getElementById("target-edit");
+    var targetDisplaySpan = document.getElementById("target-display");
+    var targetInput = document.getElementById("target-input");
+    var targetSaveBtn = document.getElementById("target-save");
+    var targetClearBtn = document.getElementById("target-clear");
+    var targetCancelBtn = document.getElementById("target-cancel");
+
+    if (targetEditBtn) {
+        targetEditBtn.addEventListener("click", function() {
+            targetDisplaySpan.style.display = "none";
+            targetEditDiv.style.display = "inline";
+            if (targetInput) targetInput.focus();
+        });
+    }
+    if (targetCancelBtn) {
+        targetCancelBtn.addEventListener("click", function() {
+            targetDisplaySpan.style.display = "inline";
+            targetEditDiv.style.display = "none";
+        });
+    }
+    if (targetClearBtn) {
+        targetClearBtn.addEventListener("click", function() {
+            if (targetInput) targetInput.value = "";
+            if (targetSaveBtn) targetSaveBtn.click();
+        });
+    }
+    if (targetSaveBtn) {
+        targetSaveBtn.addEventListener("click", function() {
+            var val = targetInput ? targetInput.value.trim() : "";
+            var targetPrice = val ? parseFloat(val) : null;
+            fetch("/api/product/" + productId + "/target-price", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ target_price: targetPrice }),
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.ok) {
+                    targetDisplaySpan.style.display = "inline";
+                    targetEditDiv.style.display = "none";
+                    document.getElementById("detail-target").textContent = fmtPrice(targetPrice) || "Not set";
+                }
+            })
+            .catch(function() {});
+        });
+    }
 
     /* CSS Selectors form */
     var selForm = document.getElementById("selectors-form");
