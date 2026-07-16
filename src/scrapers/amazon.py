@@ -30,16 +30,16 @@ class AmazonScraper(BaseScraper):
         return bool(self.DOMAIN_PATTERN.search(url))
 
     async def scrape(self, url: str) -> ProductInfo:
-        html = await fetch_page(url, self.HEADERS)
+        html, final_url = await fetch_page(url, self.HEADERS)
         soup = BeautifulSoup(html, "lxml")
 
         # Try JSON-LD structured data first
         json_ld = self._extract_json_ld(soup)
         if json_ld:
-            return self._parse_json_ld(json_ld, url)
+            return self._parse_json_ld(json_ld, url, final_url)
 
         # Fallback to HTML parsing
-        return self._parse_html(soup, url)
+        return self._parse_html(soup, url, final_url)
 
     def _extract_json_ld(self, soup: BeautifulSoup) -> dict | None:
         scripts = soup.find_all("script", type="application/ld+json")
@@ -56,7 +56,7 @@ class AmazonScraper(BaseScraper):
                 continue
         return None
 
-    def _parse_json_ld(self, data: dict, url: str) -> ProductInfo:
+    def _parse_json_ld(self, data: dict, url: str, final_url: str) -> ProductInfo:
         name = data.get("name", "Unknown Product")
 
         offers = data.get("offers", {})
@@ -92,6 +92,7 @@ class AmazonScraper(BaseScraper):
             price=price,
             available=available,
             url=url,
+            final_url=final_url,
             currency=currency,
         )
 
@@ -107,7 +108,7 @@ class AmazonScraper(BaseScraper):
         ]
         return any(v in availability_lower for v in in_stock_values)
 
-    def _parse_html(self, soup: BeautifulSoup, url: str) -> ProductInfo:
+    def _parse_html(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo:
         # Product title
         name = "Unknown Product"
         title_elem = soup.find(id="productTitle")
@@ -146,4 +147,5 @@ class AmazonScraper(BaseScraper):
             price=price,
             available=available,
             url=url,
+            final_url=final_url,
         )

@@ -5,6 +5,13 @@
 
 <div class="card">
     <p><strong>URL:</strong> <a href="{{ product.url }}" target="_blank">{{ product.url }}</a></p>
+    {% if product.final_url and product.final_url != product.url %}
+    <p id="redirect-warning" style="margin-top: 0.3rem; color: #d97706;">
+        <strong>⚠ Scraped from:</strong>
+        <a href="{{ product.final_url }}" target="_blank" style="color: #d97706;">{{ product.final_url }}</a>
+        <span style="font-size: 0.85rem;">(redirected from original URL)</span>
+    </p>
+    {% endif %}
     <p style="margin-top: 0.75rem;">
         <a href="{{ product.url }}" target="_blank" class="btn">Configure / View Product</a>
     </p>
@@ -256,6 +263,14 @@
                 document.getElementById("detail-checked").textContent = d.last_checked || "\u2014";
                 document.getElementById("detail-target").textContent = d.target_price != null ? "$" + Number(d.target_price).toFixed(2) : "Not set";
                 document.getElementById("detail-lowest").textContent = d.lowest_price != null ? "$" + Number(d.lowest_price).toFixed(2) : "Not set";
+                if (d.final_url && d.final_url !== d.url) {
+                    var redirectEl = document.getElementById("redirect-warning");
+                    if (redirectEl) {
+                        redirectEl.style.display = "block";
+                        redirectEl.querySelector("a").href = d.final_url;
+                        redirectEl.querySelector("a").textContent = d.final_url;
+                    }
+                }
                 if (d.lowest_price_date) {
                     document.getElementById("lowest-date").textContent = " on " + d.lowest_price_date;
                 }

@@ -39,7 +39,7 @@ class DellScraper(BaseScraper):
         return bool(self.DOMAIN_PATTERN.search(url))
 
     async def scrape(self, url: str) -> ProductInfo:
-        html = await fetch_page(url, self.HEADERS)
+        html, final_url = await fetch_page(url, self.HEADERS)
         soup = BeautifulSoup(html, "lxml")
 
         # Log a snippet of the response to help diagnose parsing failures
@@ -49,20 +49,20 @@ class DellScraper(BaseScraper):
         json_ld = self._extract_json_ld(soup)
         if json_ld:
             logger.debug("Dell: found JSON-LD product data")
-            return self._parse_json_ld(json_ld, url)
+            return self._parse_json_ld(json_ld, url, final_url)
 
         # 2. Try Next.js __NEXT_DATA__ (Dell uses Next.js)
-        info = self._try_next_data(soup, url)
+        info = self._try_next_data(soup, url, final_url)
         if info:
             return info
 
         # 3. Try any inline script tag that looks like a product data blob
-        info = self._try_inline_scripts(soup, url)
+        info = self._try_inline_scripts(soup, url, final_url)
         if info:
             return info
 
         # 4. Fall back to HTML / meta tag parsing
-        result = self._parse_html(soup, url)
+        result = self._parse_html(soup, url, final_url)
         if result.name == "Unknown Product":
             title_text = soup.find("title")
             title_text = title_text.get_text(strip=True) if title_text else None
@@ -95,7 +95,7 @@ class DellScraper(BaseScraper):
                 continue
         return None
 
-    def _parse_json_ld(self, data: dict, url: str) -> ProductInfo:
+    def _parse_json_ld(self, data: dict, url: str, final_url: str) -> ProductInfo:
         name = data.get("name", "Unknown Product")
 
         offers = data.get("offers", {})
@@ -119,13 +119,13 @@ class DellScraper(BaseScraper):
         availability = offers.get("availability", "")
         available = self._is_available(availability)
 
-        return ProductInfo(name=name, price=price, available=available, url=url, currency=currency)
+        return ProductInfo(name=name, price=price, available=available, url=url, final_url=final_url, currency=currency)
 
     # ------------------------------------------------------------------ #
     # Next.js __NEXT_DATA__                                                #
     # ------------------------------------------------------------------ #
 
-    def _try_next_data(self, soup: BeautifulSoup, url: str) -> ProductInfo | None:
+    def _try_next_data(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo | None:
         script = soup.find("script", id="__NEXT_DATA__")
         if not script or not script.string:
             logger.info("Dell: no __NEXT_DATA__ script tag found in page")
@@ -168,13 +168,13 @@ class DellScraper(BaseScraper):
         available = self._extract_availability_from_dict(product)
 
         logger.debug("Dell __NEXT_DATA__ parsed: name=%r price=%r available=%r", name, price, available)
-        return ProductInfo(name=name, price=price, available=available, url=url)
+        return ProductInfo(name=name, price=price, available=available, url=url, final_url=final_url)
 
     # ------------------------------------------------------------------ #
     # Inline script heuristic                                              #
     # ------------------------------------------------------------------ #
 
-    def _try_inline_scripts(self, soup: BeautifulSoup, url: str) -> ProductInfo | None:
+    def _try_inline_scripts(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo | None:
         """Search all inline <script> tags for embedded product JSON blobs."""
         patterns = [
             # window.digitalData / Adobe DTM style
@@ -199,7 +199,7 @@ class DellScraper(BaseScraper):
                             price = self._extract_price_from_dict(product)
                             available = self._extract_availability_from_dict(product)
                             logger.debug("Dell inline script parsed: name=%r", name)
-                            return ProductInfo(name=name, price=price, available=available, url=url)
+                            return ProductInfo(name=name, price=price, available=available, url=url, final_url=final_url)
                     except (json.JSONDecodeError, TypeError):
                         continue
 
@@ -210,7 +210,7 @@ class DellScraper(BaseScraper):
                 price_m = re.search(r'"(?:price|salePrice|finalPrice|unitPrice)"\s*:\s*([\d.]+)', text)
                 price = float(price_m.group(1)) if price_m else None
                 logger.debug("Dell inline script regex parsed: name=%r price=%r", name, price)
-                return ProductInfo(name=name, price=price, available=True, url=url)
+                return ProductInfo(name=name, price=price, available=True, url=url, final_url=final_url)
 
         return None
 
@@ -218,7 +218,7 @@ class DellScraper(BaseScraper):
     # HTML / meta fallback                                                 #
     # ------------------------------------------------------------------ #
 
-    def _parse_html(self, soup: BeautifulSoup, url: str) -> ProductInfo:
+    def _parse_html(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo:
         name = "Unknown Product"
         og_title = soup.find("meta", property="og:title")
         if og_title and og_title.get("content"):
@@ -273,7 +273,7 @@ class DellScraper(BaseScraper):
         if soup.find(string=re.compile(r"out of stock|sold out|unavailable|discontinued", re.I)):
             available = False
 
-        return ProductInfo(name=name, price=price, available=available, url=url)
+        return ProductInfo(name=name, price=price, available=available, url=url, final_url=final_url)
 
     # ------------------------------------------------------------------ #
     # Helpers                                                              #

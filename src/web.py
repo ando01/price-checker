@@ -152,6 +152,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
                 "lowest_price": p.lowest_price,
                 "lowest_price_date": p.lowest_price_date.strftime("%Y-%m-%d %H:%M")
                 if p.lowest_price_date else None,
+                "final_url": p.final_url,
                 "check_availability": p.check_availability,
                 "check_price": p.check_price,
                 "notify": p.notify,
@@ -274,6 +275,7 @@ def create_app(database: Database, scheduler: BackgroundScheduler, checker: Prod
             "lowest_price": product.lowest_price,
             "lowest_price_date": product.lowest_price_date.strftime("%Y-%m-%d")
             if product.lowest_price_date else None,
+            "final_url": product.final_url,
             "history": [
                 {
                     "status": h["status"],

@@ -25,16 +25,16 @@ class UIStoreScraper(BaseScraper):
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/120.0.0.0 Safari/537.36",
         }
-        html = await fetch_page(url, headers)
+        html, final_url = await fetch_page(url, headers)
         soup = BeautifulSoup(html, "lxml")
 
         # Look for JSON-LD structured data
         json_ld = self._extract_json_ld(soup)
         if json_ld:
-            return self._parse_json_ld(json_ld, url)
+            return self._parse_json_ld(json_ld, url, final_url)
 
         # Fallback: try to parse page directly
-        return self._parse_html(soup, url)
+        return self._parse_html(soup, url, final_url)
 
     def _extract_json_ld(self, soup: BeautifulSoup) -> dict | None:
         """Extract JSON-LD product data from the page."""
@@ -57,7 +57,7 @@ class UIStoreScraper(BaseScraper):
 
         return None
 
-    def _parse_json_ld(self, data: dict, url: str) -> ProductInfo:
+    def _parse_json_ld(self, data: dict, url: str, final_url: str) -> ProductInfo:
         """Parse product info from JSON-LD data."""
         name = data.get("name", "Unknown Product")
 
@@ -123,6 +123,7 @@ class UIStoreScraper(BaseScraper):
             price=price,
             available=available,
             url=url,
+            final_url=final_url,
             currency=currency,
         )
 
@@ -146,7 +147,7 @@ class UIStoreScraper(BaseScraper):
 
         return False
 
-    def _parse_html(self, soup: BeautifulSoup, url: str) -> ProductInfo:
+    def _parse_html(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo:
         """Fallback HTML parsing when JSON-LD is not available."""
         # Try to find product name
         name = "Unknown Product"
@@ -188,4 +189,5 @@ class UIStoreScraper(BaseScraper):
             price=price,
             available=available,
             url=url,
+            final_url=final_url,
         )

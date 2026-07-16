@@ -49,39 +49,39 @@ class GenericScraper(BaseScraper):
 
     async def scrape(self, url: str, selectors: CSSSelectors | None = None) -> ProductInfo:
         """Scrape product info using multiple strategies."""
-        html = await fetch_page(url, self.HEADERS)
+        html, final_url = await fetch_page(url, self.HEADERS)
         soup = BeautifulSoup(html, "lxml")
 
         # Strategy 1: JSON-LD structured data
         json_ld = self._extract_json_ld(soup)
         if json_ld:
-            info = self._parse_json_ld(json_ld, url)
+            info = self._parse_json_ld(json_ld, url, final_url)
             if info.name != "Unknown Product" or info.price is not None:
                 logger.debug("Generic scraper: extracted via JSON-LD for %s", url)
                 return info
 
         # Strategy 2: Open Graph / product meta tags
-        info = self._parse_meta_tags(soup, url)
+        info = self._parse_meta_tags(soup, url, final_url)
         if info.name != "Unknown Product" or info.price is not None:
             logger.debug("Generic scraper: extracted via meta tags for %s", url)
             # Try to enhance with CSS selectors if we're missing data
             if selectors and (info.price is None or info.name == "Unknown Product"):
-                css_info = self._parse_css_selectors(soup, url, selectors)
+                css_info = self._parse_css_selectors(soup, url, final_url, selectors)
                 if info.name == "Unknown Product" and css_info.name != "Unknown Product":
                     info = ProductInfo(
                         name=css_info.name, price=info.price, available=info.available,
-                        url=url, currency=info.currency,
+                        url=url, final_url=final_url, currency=info.currency,
                     )
                 if info.price is None and css_info.price is not None:
                     info = ProductInfo(
                         name=info.name, price=css_info.price, available=info.available,
-                        url=url, currency=info.currency,
+                        url=url, final_url=final_url, currency=info.currency,
                     )
             return info
 
         # Strategy 3: Custom CSS selectors
         if selectors:
-            info = self._parse_css_selectors(soup, url, selectors)
+            info = self._parse_css_selectors(soup, url, final_url, selectors)
             if info.name != "Unknown Product" or info.price is not None:
                 logger.debug("Generic scraper: extracted via CSS selectors for %s", url)
                 return info
@@ -89,7 +89,7 @@ class GenericScraper(BaseScraper):
         # Strategy 4: Best-effort fallback
         name = self._get_page_title(soup)
         logger.warning("Generic scraper: limited data extracted for %s", url)
-        return ProductInfo(name=name, price=None, available=False, url=url)
+        return ProductInfo(name=name, price=None, available=False, url=url, final_url=final_url)
 
     # --- JSON-LD ---
 
@@ -127,7 +127,7 @@ class GenericScraper(BaseScraper):
                 return self._find_product_in_json_ld(graph)
         return None
 
-    def _parse_json_ld(self, data: dict, url: str) -> ProductInfo:
+    def _parse_json_ld(self, data: dict, url: str, final_url: str) -> ProductInfo:
         """Parse a schema.org Product JSON-LD object."""
         name = data.get("name", "Unknown Product")
 
@@ -154,12 +154,13 @@ class GenericScraper(BaseScraper):
         available = self._is_available(availability)
 
         return ProductInfo(
-            name=name, price=price, available=available, url=url, currency=currency,
+            name=name, price=price, available=available, url=url,
+            final_url=final_url, currency=currency,
         )
 
     # --- Meta tags ---
 
-    def _parse_meta_tags(self, soup: BeautifulSoup, url: str) -> ProductInfo:
+    def _parse_meta_tags(self, soup: BeautifulSoup, url: str, final_url: str) -> ProductInfo:
         """Extract product info from Open Graph and other meta tags."""
         name = (
             self._get_meta(soup, "og:title")
@@ -186,7 +187,8 @@ class GenericScraper(BaseScraper):
         available = self._is_available(availability_meta)
 
         return ProductInfo(
-            name=name, price=price, available=available, url=url, currency=currency,
+            name=name, price=price, available=available, url=url,
+            final_url=final_url, currency=currency,
         )
 
     def _get_meta(self, soup: BeautifulSoup, prop: str) -> str | None:
@@ -201,7 +203,7 @@ class GenericScraper(BaseScraper):
     # --- CSS selectors ---
 
     def _parse_css_selectors(
-        self, soup: BeautifulSoup, url: str, selectors: CSSSelectors,
+        self, soup: BeautifulSoup, url: str, final_url: str, selectors: CSSSelectors,
     ) -> ProductInfo:
         """Extract product info using user-provided CSS selectors."""
         name = "Unknown Product"
@@ -226,7 +228,7 @@ class GenericScraper(BaseScraper):
             # If no availability selector, assume available when we found a price
             available = price is not None
 
-        return ProductInfo(name=name, price=price, available=available, url=url)
+        return ProductInfo(name=name, price=price, available=available, url=url, final_url=final_url)
 
     # --- Helpers ---
 

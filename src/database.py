@@ -22,6 +22,7 @@ class Product:
     css_name: str | None = None
     css_price: str | None = None
     css_availability: str | None = None
+    final_url: str | None = None  # URL after redirects (for debugging)
 
 
 @dataclass
@@ -111,6 +112,12 @@ class Database:
                 pass
             try:
                 conn.execute("ALTER TABLE products ADD COLUMN lowest_price_date TIMESTAMP")
+            except sqlite3.OperationalError:
+                pass
+
+            # Migration: add final_url column
+            try:
+                conn.execute("ALTER TABLE products ADD COLUMN final_url TEXT")
             except sqlite3.OperationalError:
                 pass
 
@@ -351,6 +358,16 @@ class Database:
                 (lowest_price, lowest_date, product_id),
             )
 
+    def update_product_final_url(
+        self, product_id: int, final_url: str | None
+    ) -> None:
+        """Update the final URL after redirects."""
+        with self._get_connection() as conn:
+            conn.execute(
+                "UPDATE products SET final_url = ? WHERE id = ?",
+                (final_url, product_id),
+            )
+
     def get_product_history_sampled(
         self, product_id: int, max_points: int = 200
     ) -> list[dict]:
@@ -462,6 +479,7 @@ class Database:
             lowest_price=row["lowest_price"] if "lowest_price" in row.keys() else None,
             lowest_price_date=datetime.fromisoformat(row["lowest_price_date"])
             if row["lowest_price_date"] else None,
+            final_url=row["final_url"] if "final_url" in row.keys() else None,
             check_availability=bool(ca if ca is not None else 1),
             check_price=bool(cp if cp is not None else 1),
             notify=bool(row["notify"] if "notify" in row.keys() and row["notify"] is not None else 1),

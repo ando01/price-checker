@@ -2,6 +2,8 @@ import asyncio
 import logging
 from datetime import datetime
 
+from urllib.parse import urlparse
+
 from .config import Config
 from .database import Database, Product
 from .notifier import PushoverNotifier
@@ -35,6 +37,40 @@ class ProductChecker:
                 return scraper
         return None
 
+    @staticmethod
+    def _url_path_mismatch(original_url: str, final_url: str) -> bool:
+        """Check if the final URL is on a completely different path than expected.
+
+        Returns True if a redirect landed us on an unrelated page (e.g., category
+        instead of product), which would make the scraped data unreliable.
+        """
+        if not final_url:
+            return False
+
+        orig_path = urlparse(original_url).path.rstrip("/")
+        final_path = urlparse(final_url).path.rstrip("/")
+
+        # Exact match — fine
+        if orig_path == final_path:
+            return False
+
+        # The final URL is a parent path of the original (e.g. /mac-studio → /mac)
+        # This means the product page redirected to a category listing
+        if final_path and orig_path.startswith(final_path + "/"):
+            return True
+
+        # The final URL path doesn't share the original path segment at all
+        # (e.g. /shop/refurbished/mac/mac-studio → /shop/refurbished/mac)
+        orig_parts = orig_path.split("/")
+        final_parts = final_path.split("/")
+        # If final URL path is shorter and doesn't share the last meaningful segment
+        if len(final_parts) < len(orig_parts) and final_parts != orig_parts[:len(final_parts)]:
+            # Check if the final path is a direct parent redirect
+            if final_parts and orig_parts[:len(final_parts)] == final_parts:
+                return True
+
+        return False
+
     async def check_product(
         self, url: str, name: str | None = None, product: Product | None = None,
     ) -> ProductInfo | None:
@@ -54,6 +90,15 @@ class ProductChecker:
                         availability=product.css_availability,
                     )
                 info = await self.generic_scraper.scrape(url, selectors=selectors)
+
+            # Check for redirect to unrelated page
+            if info.final_url and self._url_path_mismatch(url, info.final_url):
+                logger.warning(
+                    f"Redirect mismatch for {name or url}: "
+                    f"{url} → {info.final_url} "
+                    f"(scraped {info.name} at ${info.price} — data may be unreliable)"
+                )
+                # Still return the info but flag it — caller decides what to do
 
             logger.info(
                 f"Checked {info.name}: "
@@ -100,6 +145,10 @@ class ProductChecker:
                 name=info.name if not product.name else None,
             )
 
+            # Store the final URL after redirects (for debugging)
+            if info.final_url:
+                self.database.update_product_final_url(product.id, info.final_url)
+
             # Send notification if item just became available
             if product.notify and current_status == "available" and previous_status != "available":
                 logger.info(f"Item became available: {info.name}")
@@ -143,6 +192,10 @@ class ProductChecker:
                 price=new_price,
                 name=info.name if not product.name else None,
             )
+
+            # Store the final URL after redirects (for debugging)
+            if info.final_url:
+                self.database.update_product_final_url(product.id, info.final_url)
 
             # Update lowest price seen
             if new_price is not None and (
@@ -213,6 +266,10 @@ class ProductChecker:
             price=new_price,
             name=info.name if not product.name else None,
         )
+
+        # Store the final URL after redirects (for debugging)
+        if info.final_url:
+            self.database.update_product_final_url(product.id, info.final_url)
 
         if product.notify and product.check_availability and current_status == "available" and previous_status != "available":
             logger.info(f"Item became available: {info.name}")

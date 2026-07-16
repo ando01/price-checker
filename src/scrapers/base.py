@@ -9,6 +9,7 @@ class ProductInfo:
     price: float | None
     available: bool
     url: str
+    final_url: str | None = None  # URL after redirects
     currency: str = "USD"
 
 
