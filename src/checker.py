@@ -98,7 +98,9 @@ class ProductChecker:
                     f"{url} → {info.final_url} "
                     f"(scraped {info.name} at ${info.price} — data may be unreliable)"
                 )
-                # Still return the info but flag it — caller decides what to do
+                # Redirect landed on a category page — skip update to avoid stale/false data
+                logger.debug("Skipping %s due to redirect mismatch", name or url)
+                return None
 
             logger.info(
                 f"Checked {info.name}: "
